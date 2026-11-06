@@ -111,8 +111,8 @@ pub(crate) async fn refresh(
         let remaining = SourceLimits::DEFAULT.max_bytes.saturating_sub(bytes);
         let downloaded = download(&url, &local.config.global.bootstrap_resolver, remaining).await;
         let content = match downloaded.and_then(|body| {
-            let text = std::str::from_utf8(&body)
-                .map_err(|_| anyhow::anyhow!("远程规则不是 UTF-8"))?;
+            let text =
+                std::str::from_utf8(&body).map_err(|_| anyhow::anyhow!("远程规则不是 UTF-8"))?;
             remote::validate(text)?;
             Ok(Arc::<str>::from(text))
         }) {
@@ -143,10 +143,8 @@ pub(crate) async fn refresh(
             }
             fetched.clear();
             for path in paths {
-                let content = cache::read(
-                    &path,
-                    SourceLimits::DEFAULT.max_bytes.saturating_sub(bytes),
-                )?;
+                let content =
+                    cache::read(&path, SourceLimits::DEFAULT.max_bytes.saturating_sub(bytes))?;
                 remote::validate(&content)?;
                 bytes += content.len();
                 overlay.insert(path, Arc::from(content));
@@ -232,12 +230,16 @@ pub(crate) async fn refresh_active(
 
 fn same_sources(left: &[SourceSnapshot], right: &[SourceSnapshot]) -> bool {
     left.len() == right.len()
-        && left.iter().zip(right).all(|(left, right)| {
-            left.path == right.path && left.content == right.content
-        })
+        && left
+            .iter()
+            .zip(right)
+            .all(|(left, right)| left.path == right.path && left.content == right.content)
 }
 
-fn check_local_sources(local: &[SourceSnapshot], accepted: &[SourceSnapshot]) -> anyhow::Result<()> {
+fn check_local_sources(
+    local: &[SourceSnapshot],
+    accepted: &[SourceSnapshot],
+) -> anyhow::Result<()> {
     let root = local
         .first()
         .and_then(|source| source.path.parent())
@@ -257,7 +259,10 @@ fn check_local_sources(local: &[SourceSnapshot], accepted: &[SourceSnapshot]) ->
     Ok(())
 }
 
-fn validate_candidate(entry: &Path, overlay: &HashMap<PathBuf, Arc<str>>) -> anyhow::Result<Update> {
+fn validate_candidate(
+    entry: &Path,
+    overlay: &HashMap<PathBuf, Arc<str>>,
+) -> anyhow::Result<Update> {
     let mut diagnostics = Vec::new();
     let loaded = honk_config::Config::from_dae_sources_in_memory(
         entry,
@@ -267,7 +272,10 @@ fn validate_candidate(entry: &Path, overlay: &HashMap<PathBuf, Arc<str>>) -> any
     )?;
     loaded.config.validate()?;
     crate::routing::Router::from_config(&loaded.config.routing)?;
-    Ok(Update { loaded, diagnostics })
+    Ok(Update {
+        loaded,
+        diagnostics,
+    })
 }
 
 async fn download(url: &str, bootstrap: &str, max_bytes: usize) -> anyhow::Result<Arc<[u8]>> {

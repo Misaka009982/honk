@@ -24,7 +24,9 @@ pub(crate) async fn prepare(config: &Config, db: Option<Arc<StateDb>>) -> anyhow
     .collect();
     if missing.is_empty()
         || (!settings.enabled || !settings.config_write)
-            && missing.iter().all(|kind| requirements.codes(kind).is_empty())
+            && missing
+                .iter()
+                .all(|kind| requirements.codes(kind).is_empty())
     {
         return Ok(());
     }
@@ -34,7 +36,11 @@ pub(crate) async fn prepare(config: &Config, db: Option<Arc<StateDb>>) -> anyhow
             Some(
                 match tokio::task::spawn_blocking(move || Sources::open(db, &settings)).await? {
                     Ok(sources) => sources,
-                    Err(error) if missing.iter().all(|kind| requirements.codes(kind).is_empty()) => {
+                    Err(error)
+                        if missing
+                            .iter()
+                            .all(|kind| requirements.codes(kind).is_empty()) =>
+                    {
                         crate::state::log_sql(&error);
                         tracing::warn!("Geo 设置不可用，跳过非必需预下载");
                         return Ok(());
@@ -66,7 +72,9 @@ pub(crate) async fn prepare(config: &Config, db: Option<Arc<StateDb>>) -> anyhow
             continue;
         }
         let urls = super::urls(settings, sources.as_ref(), kind);
-        let verify = sources.as_ref().is_none_or(|sources| sources.effective().verify_checksum);
+        let verify = sources
+            .as_ref()
+            .is_none_or(|sources| sources.effective().verify_checksum);
         let result = fetch_and_install(
             kind,
             &urls,

@@ -48,14 +48,15 @@ fn sub_store_anytls_compatibility_preserves_explicit_security_rejections() {
         "security=none&type=tcp&type=ws",
         "security=none&type=tcp&network=ws",
     ] {
-        let body = format!(
-            "anytls://password@example.com:443?{query}\nsocks5://127.0.0.1:1080#retained"
-        );
+        let body =
+            format!("anytls://password@example.com:443?{query}\nsocks5://127.0.0.1:1080#retained");
         let nodes = parse_subscription_content(&Subscription::default(), &body).unwrap();
         assert_eq!(nodes.len(), 1, "{query}");
         assert_eq!(nodes[0].name, "retained", "{query}");
     }
-    assert!(super::share_link("trojan://password@example.com:443?security=none&type=tcp").is_none());
+    assert!(
+        super::share_link("trojan://password@example.com:443?security=none&type=tcp").is_none()
+    );
 }
 
 #[test]
@@ -77,17 +78,26 @@ fn sub_store_anytls_clash_transport_does_not_disable_udp() {
     .unwrap();
     assert_eq!(nodes.len(), 3);
     assert_eq!(nodes[0].name, "converted");
-    assert_eq!(nodes[0].anytls().unwrap().network.as_deref(), Some("tcp,udp"));
+    assert_eq!(
+        nodes[0].anytls().unwrap().network.as_deref(),
+        Some("tcp,udp")
+    );
     assert_eq!(nodes[1].name, "restricted");
     assert_eq!(nodes[1].anytls().unwrap().network.as_deref(), Some("tcp"));
-    assert!(
-        (honk_outbound::descriptor::descriptor(nodes[2].protocol()).supports_udp)(&nodes[2])
-    );
+    assert!((honk_outbound::descriptor::descriptor(nodes[2].protocol()).supports_udp)(&nodes[2]));
     assert!(diagnostics.iter().any(|diagnostic| {
         diagnostic.code == "duplicate-subscription-entry" && diagnostic.entry_index == Some(2)
     }));
-    assert!(diagnostics.iter().any(|diagnostic| diagnostic.entry_index == Some(4)));
-    assert!(diagnostics.iter().any(|diagnostic| diagnostic.entry_index == Some(5)));
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.entry_index == Some(4))
+    );
+    assert!(
+        diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.entry_index == Some(5))
+    );
 }
 
 #[test]
@@ -104,8 +114,16 @@ fn anytls_uri_applies_alpn_and_udp_to_the_runtime_node() {
     assert!(!(honk_outbound::descriptor::descriptor(node.protocol()).supports_udp)(node));
     let registry = honk_outbound::proxy::ProxyRegistry::default_resolver().unwrap();
     assert!(registry.find(node.protocol()).is_some());
-    for suffix in ["&udp=1", "&alpn=h3", "&type=ws", "&idle_session_timeout=10s"] {
-        assert!(parse_subscription_content(&Subscription::default(), &format!("{body}{suffix}")).is_err());
+    for suffix in [
+        "&udp=1",
+        "&alpn=h3",
+        "&type=ws",
+        "&idle_session_timeout=10s",
+    ] {
+        assert!(
+            parse_subscription_content(&Subscription::default(), &format!("{body}{suffix}"))
+                .is_err()
+        );
     }
 }
 
@@ -120,7 +138,10 @@ fn sub_store_plain_json_preserves_supported_siblings() {
         let nodes = parse_subscription_content(&subscription, body).unwrap();
         assert_eq!(nodes.len(), 1);
         assert_eq!(nodes[0].name, "json");
-        assert_eq!(nodes[0].anytls().unwrap().network.as_deref(), Some("tcp,udp"));
+        assert_eq!(
+            nodes[0].anytls().unwrap().network.as_deref(),
+            Some("tcp,udp")
+        );
     }
     let sip008 = r#"[{"server":"example.com","server_port":443,"password":"secret","method":"aes-128-gcm"}]"#;
     let nodes = parse_subscription_content(&Subscription::default(), sip008).unwrap();

@@ -20,11 +20,9 @@ pub(super) enum LoadMode {
 }
 
 pub fn is_remote(pattern: &str) -> bool {
-    pattern
-        .split_once("://")
-        .is_some_and(|(scheme, _)| {
-            scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http")
-        })
+    pattern.split_once("://").is_some_and(|(scheme, _)| {
+        scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http")
+    })
 }
 
 pub fn cache_path(root: &Path, pattern: &str) -> Result<PathBuf, crate::ConfigError> {

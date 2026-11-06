@@ -59,7 +59,11 @@ async fn periodic_refresh_returns_only_changes_and_preserves_local_edits() {
     let (_, accepted) = load_local(&entry, &mut Vec::new()).unwrap();
     let before = std::fs::metadata(&cached).unwrap();
     let server = tokio::spawn(async move {
-        for body in [old, new, "routing { domain(suffix: example.com) -> absent }"] {
+        for body in [
+            old,
+            new,
+            "routing { domain(suffix: example.com) -> absent }",
+        ] {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut request = Vec::new();
             while !request.ends_with(b"\r\n\r\n") {
@@ -95,7 +99,11 @@ async fn periodic_refresh_returns_only_changes_and_preserves_local_edits() {
             .is_none()
     );
     assert_eq!(std::fs::read_to_string(&cached).unwrap(), new);
-    std::fs::write(&entry, original.replace("fallback: direct", "fallback: block")).unwrap();
+    std::fs::write(
+        &entry,
+        original.replace("fallback: direct", "fallback: block"),
+    )
+    .unwrap();
     let error = refresh(&entry, Some(&update.loaded.sources))
         .await
         .err()
@@ -140,7 +148,11 @@ async fn local_edit_during_download_prevents_cache_publication() {
         _ = wait => {}
         _ = &mut pending => panic!("下载应等待服务端响应"),
     }
-    std::fs::write(&entry, original.replace("fallback: direct", "fallback: block")).unwrap();
+    std::fs::write(
+        &entry,
+        original.replace("fallback: direct", "fallback: block"),
+    )
+    .unwrap();
     release.send(()).unwrap();
     assert!(pending.await.is_err());
     server.await.unwrap();

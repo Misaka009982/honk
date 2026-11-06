@@ -22,7 +22,10 @@ async fn frame(stream: &mut (impl AsyncRead + Unpin)) -> (u8, u32, Vec<u8>) {
 async fn send(stream: &mut (impl AsyncWrite + Unpin), command: u8, id: u32, bytes: &[u8]) {
     stream.write_u8(command).await.unwrap();
     stream.write_u32(id).await.unwrap();
-    stream.write_u16(bytes.len().try_into().unwrap()).await.unwrap();
+    stream
+        .write_u16(bytes.len().try_into().unwrap())
+        .await
+        .unwrap();
     stream.write_all(bytes).await.unwrap();
     stream.flush().await.unwrap();
 }

@@ -25,7 +25,10 @@ fn directory(path: &Path) -> anyhow::Result<File> {
 }
 
 pub(super) fn read(path: &Path, max_bytes: usize) -> anyhow::Result<String> {
-    let parent = directory(path.parent().ok_or_else(|| anyhow::anyhow!("缓存路径无效"))?)?;
+    let parent = directory(
+        path.parent()
+            .ok_or_else(|| anyhow::anyhow!("缓存路径无效"))?,
+    )?;
     let name = path
         .file_name()
         .ok_or_else(|| anyhow::anyhow!("缓存路径无效"))?;
@@ -77,7 +80,12 @@ pub(super) fn replace(path: &Path, content: &[u8]) -> anyhow::Result<()> {
             before.dev() == after.dev() && before.ino() == after.ino(),
             "缓存目录在写入期间发生变化"
         );
-        renameat(&cache, temporary.as_str(), &cache, path.file_name().unwrap())?;
+        renameat(
+            &cache,
+            temporary.as_str(),
+            &cache,
+            path.file_name().unwrap(),
+        )?;
         cache.sync_all()?;
         root.sync_all()?;
         Ok(())

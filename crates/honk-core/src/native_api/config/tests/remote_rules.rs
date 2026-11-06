@@ -107,7 +107,11 @@ async fn manual_reload_queues_behind_periodic_refresh_and_shutdown_cancels_downl
     tick().await;
     let first = request(&listener).await;
     fixture.service.request_sighup().unwrap();
-    assert!(timeout(Duration::from_millis(30), listener.accept()).await.is_err());
+    assert!(
+        timeout(Duration::from_millis(30), listener.accept())
+            .await
+            .is_err()
+    );
     respond(first, OLD_RULES).await;
     let mut second = request(&listener).await;
     timeout(WAIT, fixture.coordinator.take().unwrap().shutdown())
@@ -135,7 +139,11 @@ async fn shutdown_cancels_an_in_flight_periodic_download() {
         Ok(0) | Err(_)
     ));
     tick().await;
-    assert!(timeout(Duration::from_millis(30), listener.accept()).await.is_err());
+    assert!(
+        timeout(Duration::from_millis(30), listener.accept())
+            .await
+            .is_err()
+    );
     assert_eq!(fixture.reloads.load(Ordering::SeqCst), 0);
     assert_eq!(outbound(&fixture).await, "direct");
     fixture.shutdown().await;
@@ -146,7 +154,11 @@ async fn disabled_timer_stays_off_until_explicit_reload_enables_it() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let fixture = fixture(&listener, 0).await;
     tick().await;
-    assert!(timeout(Duration::from_millis(30), listener.accept()).await.is_err());
+    assert!(
+        timeout(Duration::from_millis(30), listener.accept())
+            .await
+            .is_err()
+    );
     let entry = fixture.path("main.dae");
     let enabled = fixture.originals["main.dae"].replace("interval: 0s", "interval: 60s");
     std::fs::write(&entry, enabled).unwrap();

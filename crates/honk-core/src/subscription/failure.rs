@@ -37,7 +37,8 @@ impl FailureSummary {
             .downcast_ref::<DownloadFailure>()
             .copied()
             .or_else(|| {
-                error.downcast_ref::<crate::marked_http::Error>()
+                error
+                    .downcast_ref::<crate::marked_http::Error>()
                     .map(|error| DownloadFailure::stage(error.stage))
             });
         if let Some(failure) = transport {
