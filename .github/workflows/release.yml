@@ -23,7 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test release artifact preflight
-        run: bash .github/ci/test-release-artifacts.sh
+        run: |
+          bash .github/ci/test-release-artifacts.sh
+          bash .github/ci/test-openwrt-packages.sh
+          bash .github/ci/test-openwrt-installer.sh
       - name: Test Debug release pruning
         run: bash .github/ci/test-release-prune.sh
       - name: Test release asset table
@@ -294,9 +297,62 @@ jobs:
           path: ${{ env.ARTIFACT_NAME }}.tar.gz
           retention-days: 1
 
+  openwrt:
+    name: OpenWrt 25.12 APK / IPK
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: honk-core-*-unknown-linux-musl-full
+          path: dist
+          merge-multiple: true
+      - name: Prepare OpenWrt packaging tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y fakeroot zstd
+          source install/openwrt/sdk.sh
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/openwrt-sdk.tar.zst" "$OPENWRT_SDK_URL"
+          echo "$OPENWRT_SDK_SHA256  $RUNNER_TEMP/openwrt-sdk.tar.zst" | sha256sum -c -
+          sdk_name=${OPENWRT_SDK_URL##*/}
+          sdk_name=${sdk_name%.tar.zst}
+          mkdir -p "$RUNNER_TEMP/openwrt-sdk"
+          tar --zstd -xf "$RUNNER_TEMP/openwrt-sdk.tar.zst" --strip-components=1 \
+            -C "$RUNNER_TEMP/openwrt-sdk" "$sdk_name/staging_dir/host"
+      - name: Package OpenWrt APK v3 and IPK
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" == refs/tags/debug.* ]]; then
+            prefix=debug
+          else
+            prefix=${GITHUB_REF_NAME//\//-}
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version=$GITHUB_REF_NAME
+          else
+            version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+            version+="-alpha.$GITHUB_RUN_NUMBER"
+          fi
+          bash .github/ci/build-openwrt-packages.sh dist "$prefix" "$version" "$RUNNER_TEMP/openwrt-sdk"
+          bash .github/ci/check-openwrt-packages.sh dist "$prefix"
+          (cd dist && sha256sum -- *.apk *.ipk > OPENWRT-SHA256SUMS)
+      - name: Upload OpenWrt packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openwrt-25.12-packages
+          path: |
+            dist/*.apk
+            dist/*.ipk
+            dist/OPENWRT-SHA256SUMS
+          if-no-files-found: error
+          retention-days: 1
+
   release:
     name: GitHub Release
-    needs: [test, build]
+    needs: [test, build, openwrt]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -322,11 +378,14 @@ jobs:
       # Retrying only this job after the one-day artifact retention would otherwise publish a partial set.
       - name: Check complete release artifacts
         run: |
+          set -euo pipefail
           if [[ "$GITHUB_REF" == refs/tags/debug.* ]]; then
-            bash release-source/.github/ci/check-release-artifacts.sh debug
+            prefix=debug
           else
-            bash release-source/.github/ci/check-release-artifacts.sh "$GITHUB_REF_NAME"
+            prefix=$GITHUB_REF_NAME
           fi
+          bash release-source/.github/ci/check-release-artifacts.sh "$prefix"
+          bash release-source/.github/ci/check-openwrt-packages.sh dist "$prefix"
 
       # GPL-3.0 section 6: both embedded editions share this corresponding source.
       - name: Add doona corresponding source
@@ -351,7 +410,7 @@ jobs:
         working-directory: dist
         run: |
           shopt -s nullglob
-          sha256sum -- *.tar.gz *.deb *.rpm *.pkg.tar.zst > SHA256SUMS
+          sha256sum -- *.tar.gz *.deb *.rpm *.pkg.tar.zst *.apk *.ipk > SHA256SUMS
 
       # Every release body explains each archive as {allocator}-{API}-{arch}-{libc}.
       - name: Write release notes
@@ -384,6 +443,8 @@ jobs:
             dist/*.deb
             dist/*.rpm
             dist/*.pkg.tar.zst
+            dist/*.apk
+            dist/*.ipk
             dist/SHA256SUMS
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -401,6 +462,8 @@ jobs:
           make_latest: "false"
           files: |
             dist/*.tar.gz
+            dist/*.apk
+            dist/*.ipk
             dist/SHA256SUMS
           overwrite_files: true
           fail_on_unmatched_files: true
@@ -442,6 +505,8 @@ jobs:
           make_latest: "false"
           files: |
             dist/*.tar.gz
+            dist/*.apk
+            dist/*.ipk
             dist/SHA256SUMS
           overwrite_files: true
           fail_on_unmatched_files: true

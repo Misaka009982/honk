@@ -1,5 +1,7 @@
 # Assets configuration reference
 
+本分支新增启动时补齐缺失 Geo 文件，默认采用 `geoip-lite.dat` 和完整 `geosite.dat`；配置与更新的差异见[模块说明](../../zh/operations/modular-additions.md#首次-geo-下载)。
+
 `assets {}` sets download defaults for geodata, the external Clash dashboard, and subscriptions. It does not control geodata update scheduling or checksum verification; those remain native API runtime settings.
 
 ```dae
@@ -18,6 +20,9 @@ assets {
         interval: 86400s
         cache: true
     }
+    rules {
+        interval: 24h
+    }
 }
 ```
 
@@ -32,6 +37,9 @@ assets {
 | `subscription.ua` | `honk/<version>` | Default request User-Agent for subscription entries. |
 | `subscription.interval` | `86400s` | Default periodic refresh interval; `0` disables scheduled refresh. |
 | `subscription.cache` | `true` | Default per-entry body caching, subject to `global.store_subscribe`. |
+| `rules.interval` | `86400s` | 文件模式远程 `.dae` 规则的统一刷新间隔，支持秒数及 `s`/`m`/`h`；`0` 关闭定时刷新，启动与显式重载仍刷新。 |
+
+远程规则始终直连，不继承 `assets.route`。内容变化且校验通过后自动热重载；下载失败保留旧规则，未变化不写缓存或重载，本地未重载的编辑会阻止本轮自动更新。定时刷新和手动重载串行，一轮完成后重新计时。详见[模块说明](../../zh/operations/modular-additions.md#远程规则)。
 
 An entry's options override `assets.subscription` and `assets.route`; `geodata.route` and `ui.route` override `assets.route`. Built-in defaults apply only where neither of them sets a value. See the [subscription reference](./subscription.md) for entry syntax and the [API reference](./api.md#geodata-sources-and-automatic-updates) for stored geodata settings.
 

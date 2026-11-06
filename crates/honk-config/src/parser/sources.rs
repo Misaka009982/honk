@@ -120,7 +120,11 @@ pub(super) fn load_attempt(
         overlay,
         limits,
         entry_input,
-        disk,
+        if disk {
+            super::remote::LoadMode::Disk
+        } else {
+            super::remote::LoadMode::Memory
+        },
         &mut sink,
         semantic,
     )

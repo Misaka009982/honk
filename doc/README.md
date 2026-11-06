@@ -48,6 +48,7 @@ Per-release configuration changes that affect an existing configuration. One fil
 | ---------- | --------- | ------ |
 | DNS canary and rollback runbook | [en/operations/dns-rollout.md](./en/operations/dns-rollout.md) | [zh/operations/dns-rollout.md](./zh/operations/dns-rollout.md) |
 | Long connections and keepalive / 长连接与保活 | [en/operations/long-connections.md](./en/operations/long-connections.md) | [zh/operations/long-connections.md](./zh/operations/long-connections.md) |
+| OpenWrt 25.12 APK / OPKG | [en/operations/openwrt-packages.md](./en/operations/openwrt-packages.md) | [zh/operations/openwrt-packages.md](./zh/operations/openwrt-packages.md) |
 
 ## Design / 设计
 

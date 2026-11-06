@@ -823,7 +823,7 @@ action 为 `upstream` 或 `requery` 时，`upstream` 为引擎使用的小写名
 
 真实失败且无节点才是 error，保留旧/缓存节点时为 stale。订阅条目还带有 `download`，即由 `download_detour` 决定的拉取路由，结构与 geodata 路由相同：`route` 为 `routing`、`direct` 或 `group`，`group_id` 为该组在 `GET /groups` 中的 ID，其他路由或组已不存在时为 null。文件与内联条目为 null。
 
-拉取失败时 `last_error.code` 为 `fetch_failed`。订阅的下载路由尚无可用节点时为 `route_unavailable`，见[订阅参考](./subscription.md#拉取持久化与恢复)。配置校验拒绝发布时（例如节点与静态节点重复），`last_error.code` 为 `publication_rejected`，诊断代码写在 `details.diagnostic_code`（例如 `duplicate-node-id`）。
+拉取失败时 `last_error.code` 为 `fetch_failed`，`message` 提供固定、脱敏的具体原因；`details.stage` 区分下载阶段、`body_encoding` 和 `body_parse`，并按失败类型提供 `http_status`、`diagnostic_code` 和从 1 开始的 `entry_index`。不返回原始 URL、正文或凭据。订阅的下载路由尚无可用节点时为 `route_unavailable`，见[订阅参考](./subscription.md#拉取持久化与恢复)。配置校验拒绝发布时（例如节点与静态节点重复），`last_error.code` 为 `publication_rejected`，诊断代码写在 `details.diagnostic_code`（例如 `duplicate-node-id`）。
 
 失败的 refresh 操作带相同的 details。列表 `limit` 默认 100、范围 1–1000，快照上限 8 份/30 秒/4 MiB，容量不足时返回 `503 snapshot_unavailable` 并带 `Retry-After`。游标无法识别时同样返回 `410 snapshot_expired`，带不同过滤器或 `limit` 的已识别游标返回 `400 invalid_request`。
 
@@ -971,9 +971,9 @@ HTTPS 验证证书。直连请求只用配置的数字地址 `global.bootstrap_r
 | --- | --- |
 | `config` | 已存储的列表全部来自配置文件。 |
 | `override` | 至少一个已存储列表来自 API URL 修改。 |
-| `default` | 没有已存储列表。使用内置 MetaCubeX `meta-rules-dat` 发布文件，先尝试 raw.githubusercontent.com，再尝试 fastly.jsdelivr.net。 |
+| `default` | 没有已存储列表。使用内置 MetaCubeX `meta-rules-dat` 发布文件：完整 `geosite.dat` 与 `geoip-lite.dat`，先尝试 raw.githubusercontent.com，再尝试 fastly.jsdelivr.net；本地 GeoIP 文件名仍为 `geoip.dat`。 |
 
-自动更新默认开启，间隔默认 24 小时。
+自动更新默认开启，间隔默认 24 小时。首次缺失文件的启动下载另见 [Assets 参考](./assets.md#首次-geo-下载)；本节更新接口仍只处理已加载资产。
 
 `download.route` 决定每个 geodata 请求（包括校验文件）的出口。`routing` 为默认值，与用户流量一样遵循路由规则。`group` 始终经过 `group_id` 指定的组，该 ID 即 `GET /groups` 返回的 ID。
 

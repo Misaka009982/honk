@@ -1,5 +1,7 @@
 # honk Configuration Guide
 
+本分支增加远程 `.dae` 规则 include，并将其缓存源设为只读；`assets.rules.interval` 默认 `24h`，`0` 关闭定时刷新，内容变化且通过校验后自动生效。下载失败保留当前规则，本地未重载编辑阻止自动更新。新增行为以[模块说明](../zh/operations/modular-additions.md)为准。
+
 Use this guide to assemble and operate a honk configuration. For installation and the direct-only, proxy and UI/API starting points, begin with the [startup guide](./how-to-start.md#minimal-configuration). The reference docs list individual fields.
 
 honk uses a dialect of dae configuration syntax; the [dialect reference](./reference/dialect.md) lists known differences. The table lists runtime sections and the CLI entry point. `include {}` composes files.

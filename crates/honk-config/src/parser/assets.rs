@@ -20,10 +20,11 @@ pub(super) struct ParsedAssets<'d, 'a> {
     ui_route: Option<Text<'d, 'a>>,
 }
 
-const SUB_BLOCKS: [(&str, &[&str]); 3] = [
+const SUB_BLOCKS: [(&str, &[&str]); 4] = [
     ("geodata", &["geosite", "geoip", "route"]),
     ("ui", &["url", "route"]),
     ("subscription", &["ua", "interval", "cache"]),
+    ("rules", &["interval"]),
 ];
 
 pub(super) fn parse_section<'d, 'a>(
@@ -46,7 +47,7 @@ pub(super) fn parse_section<'d, 'a>(
                         diagnostics,
                         Severity::Warning,
                         "unknown-block",
-                        "unknown assets block ignored; expected geodata, ui or subscription",
+                        "未知 assets 块已忽略；支持 geodata、ui、subscription 或 rules",
                     );
                     continue;
                 };
@@ -115,6 +116,19 @@ impl<'d, 'a> ParsedAssets<'d, 'a> {
             ("geodata", "route") => self.geodata_route = Some(value),
             ("ui", "url") => self.ui_url = Some(value),
             ("ui", "route") => self.ui_route = Some(value),
+            ("rules", "interval") => {
+                let raw = value.raw();
+                self.config.rules.interval = Some(super::lenient(
+                    crate::types::parse_duration_secs(raw),
+                    0,
+                    diagnostics,
+                    || ConfigDiagnostic {
+                        setting: "assets.rules.interval".to_owned(),
+                        value: raw.to_owned(),
+                        message: "远程规则刷新间隔无效；回退到 0s，关闭定时刷新".to_owned(),
+                    },
+                ));
+            }
             ("subscription", "ua") => defaults.ua = Some(value.raw().to_owned()),
             ("subscription", "interval") => {
                 let raw = value.raw();

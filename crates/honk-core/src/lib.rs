@@ -31,6 +31,7 @@ pub(crate) mod netlink;
 pub(crate) mod observe;
 pub mod pool;
 pub mod relay;
+mod remote_rules;
 pub mod routing;
 pub mod sniffing;
 pub mod state;
@@ -775,6 +776,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let mock_mode = cli.mock_ebpf || cfg!(not(feature = "ebpf"));
     // Everything else in `run` drops before it.
     let _instance_lock = instance_lock(mock_mode)?;
+    if cli.store == ConfigStore::File {
+        remote_rules::prepare(&cli.config).await?;
+    }
     #[cfg(feature = "native-api")]
     let mut database = None;
     let startup = (|| -> anyhow::Result<_> {
@@ -800,8 +804,14 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             native_sources = sources;
             config
         };
+        #[cfg(feature = "native-api")]
+        let remote_sources = native_sources
+            .as_ref()
+            .filter(|_| cli.store == ConfigStore::File)
+            .map(|update| update.sources.clone())
+            .unwrap_or_default();
         #[cfg(not(feature = "native-api"))]
-        let mut config = load_operator_config(cli.config.to_str().unwrap(), &mut diagnostics)?;
+        let (mut config, remote_sources) = remote_rules::load_local(&cli.config, &mut diagnostics)?;
         #[cfg(not(feature = "native-api"))]
         anyhow::ensure!(
             !config.experimental.native_api.enabled,
@@ -868,6 +878,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         };
         Ok((
             config,
+            remote_sources,
             requested_data_dir,
             data_dir_creation_error,
             log_file_path,
@@ -878,6 +889,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     })();
     let (
         mut config,
+        mut remote_sources,
         requested_data_dir,
         data_dir_creation_error,
         log_file_path,
@@ -1015,6 +1027,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         &degradations,
     );
     let state_db = claimed.state_db;
+    #[cfg(feature = "native-api")]
+    native_api::geodata::bootstrap::prepare(&config, state_db.clone()).await?;
 
     // A valid stored body makes network refresh non-blocking for startup.
     // Missing subscriptions still get the bounded first-fetch grace period;
@@ -1496,6 +1510,14 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     // SIGHUP handler: reload configuration from disk and push it to the
     // control plane without interrupting established connections.
     let config_path = cli.config.clone();
+    let reload_config = control_plane.config_handle();
+    #[cfg(feature = "native-api")]
+    let owns_rules_refresh = native_configuration.is_none() && cli.store == ConfigStore::File;
+    #[cfg(not(feature = "native-api"))]
+    let owns_rules_refresh = true;
+    if !owns_rules_refresh {
+        remote_sources.clear();
+    }
     let reload_tx = cmd_tx.clone();
     let mut activation =
         configuration::Activation::new(reload_tx.clone(), reload_subscription_supervisor);
@@ -1509,8 +1531,42 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         };
         let mut request_id = 0u64;
+        let mut rules_schedule = remote_rules::schedule::Schedule::default();
         loop {
-            sighup.recv().await;
+            let interval = if owns_rules_refresh && remote_rules::has_remote(&remote_sources) {
+                reload_config.read().await.assets.rules.interval_secs()
+            } else {
+                0
+            };
+            rules_schedule.configure(interval);
+            let periodic = tokio::select! {
+                biased;
+                received = sighup.recv() => {
+                    if received.is_none() { break; }
+                    false
+                }
+                _ = rules_schedule.wait() => true,
+            };
+            if periodic {
+                let result = remote_rules::refresh_active(
+                    &config_path,
+                    &mut remote_sources,
+                    &mut activation,
+                )
+                .await;
+                rules_schedule.finish();
+                match result {
+                    Ok(())
+                    | Err(
+                        configuration::ActivationFailure::Rejected
+                        | configuration::ActivationFailure::Degraded(_),
+                    ) => continue,
+                    Err(_) => {
+                        let _ = reload_tx.send(control::ControlCommand::Shutdown).await;
+                        break;
+                    }
+                }
+            }
             request_id = request_id.wrapping_add(1).max(1);
             info!("SIGHUP reload request {request_id} received");
             #[cfg(feature = "native-api")]
@@ -1521,13 +1577,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 continue;
             }
             let mut diagnostics = Vec::new();
-            let result = load_operator_config(
-                config_path.to_str().unwrap_or("/etc/honk/config.dae"),
-                &mut diagnostics,
-            );
+            if let Err(error) = remote_rules::prepare(&config_path).await {
+                warn!(%error, "远程规则刷新失败，保留当前配置");
+                rules_schedule.finish();
+                continue;
+            }
+            let result = remote_rules::load_local(&config_path, &mut diagnostics);
             report_detailed_diagnostics(&diagnostics);
             match result {
-                Ok(mut new_config) => {
+                Ok((mut new_config, next_sources)) => {
                     new_config.ensure_builtin_nodes();
                     match activation
                         .activate(configuration::ActivationRequest {
@@ -1542,8 +1600,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         })
                         .await
                     {
-                        Ok(_) | Err(configuration::ActivationFailure::Rejected) => {}
+                        Ok(_) => remote_sources = next_sources,
+                        Err(configuration::ActivationFailure::Rejected) => {}
                         Err(configuration::ActivationFailure::Degraded(generation)) => {
+                            remote_sources = next_sources;
                             warn!(generation, "SIGHUP reload committed with degraded datapath");
                         }
                         Err(configuration::ActivationFailure::Reconciliation(generation)) => {
@@ -1561,6 +1621,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     warn!("SIGHUP reload request {request_id} rejected: {error}")
                 }
             }
+            rules_schedule.finish();
         }
     });
 

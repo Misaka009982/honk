@@ -360,6 +360,7 @@ async fn shutdown_joins_fetches_and_keeps_the_accepted_load() {
         cached: true,
         error: Some("cache_load_failed"),
         rejection: None,
+        failure: None,
     };
     state.start_pending(MAX_ACTIVE_FETCHES);
     let mut sockets = Vec::new();
@@ -945,6 +946,7 @@ async fn startup_fetch_replaces_the_providers_own_nodes() {
         cached: true,
         error: Some("publication_rejected"),
         rejection: Some("duplicate-node-id"),
+        failure: None,
     };
 
     state.prepare_startup(&mut config, Vec::new()).await;

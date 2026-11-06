@@ -1,5 +1,9 @@
 ## Configuration
 
+## 本分支模块接入
+
+本分支基于 `v0.1.0-beta.5` 增加 `subscription/compat`、`subscription/failure`、`parser/remote`、`remote_rules` 和 `native_api/geodata/bootstrap`。订阅适配只在导入边界规范化到原生节点；远程规则只能包含 `routing`，文件模式启动/显式重载刷新，`assets.rules.interval` 默认 24h、0 关闭定时；定时任务在配置所有者中串行运行，变化经校验后激活，本地未重载编辑会阻止本轮刷新。离线验证只读缓存且 API 不允许编辑缓存来源。首次 Geo 下载仅在 `native-api` 构建中接入，必需资产缺失时要求明确的 `direct` 出口。内置源为完整 Geosite 与 GeoIP lite；配置和已存储 URL 保持原有优先级。同步上游时需保留的少量入口及验证边界见 [模块说明](../../doc/zh/operations/modular-additions.md)。下文中“非凭据来源可写”限于本地来源，Geo 运行时更新仍只处理已加载资产。
+
 Read with: `AGENTS.md` (Notes for agents: node identity, group filters, documentation rule); `real-ebpf.md` for the `ebpf` feature and NFQUEUE activation; `security.md` for the settings with security consequences; skill `honk-config-change` for the change steps.
 
 Only documented format: original **dae syntax**, `{ include { ... } global { ... } node { ... } group { ... } routing { ... } dns { ... } subscription { ... } assets { ... } experimental { ... } }`, parsed by `honk-config/src/parser/mod.rs`. `include` accepts bare/quoted `.dae` globs, entry-relative; merge entry sections first, reject repeated/cyclic/escaping files. Examples: `config.dae` (full), `config.min.dae` (minimal), `example.dae` (annotated). Reference: `doc/en/reference/`; guide: `doc/en/configuration.md`.

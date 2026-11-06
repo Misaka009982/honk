@@ -87,11 +87,17 @@ URL 带引号时，紧贴结束引号或一个完整 `(UA)` 后缀的 `#` 作为
 | `sub_type` | 解析行为 |
 | --- | --- |
 | `simple` | 自动识别分享链接列表、Clash YAML/JSON、SIP008、sing-box JSON 和受支持的客户端记录。 |
-| `clash` | 带顶层 `proxies` 序列的 YAML 或 JSON。 |
+| `clash` | 带顶层 `proxies` 序列的 YAML 或 JSON，也接受 Sub-Store 的 Clash 形状裸节点数组。 |
 | `sip008` | SIP008 `servers` 对象或裸服务器数组；不是分享链接列表。 |
 | `custom` | 与 `simple` 使用相同的格式识别。 |
 
 `honk-tool sub` 的下载正文与本地文件使用同一个解析器。
+
+## Sub-Store 兼容
+
+本分支接受 Sub-Store 的 Clash/Mihomo `proxies`、裸 JSON 节点数组，以及普通或 Base64 包装的分享链接列表。AnyTLS 转换为原生节点并使用现有 AnyTLS 出站：转换器附加的 `security=none&type=tcp` 按强制 TLS 处理，保留密码、SNI、证书校验、ALPN、UDP 限制和空闲会话设置。Clash 的 `network: tcp` 表示承载传输，UDP 能力仍由 `udp` 或 `anytls-network` 决定。明确冲突或不支持的连接参数继续逐条拒绝，不丢弃有效兄弟节点。
+
+兼容仅位于订阅导入入口，原生单节点解析保持原有契约。完整使用范围和拨号回归用例见[模块说明](../operations/modular-additions.md#sub-store-订阅)。
 
 ## 拉取、持久化与恢复
 

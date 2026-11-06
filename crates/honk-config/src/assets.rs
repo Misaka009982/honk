@@ -18,6 +18,21 @@ pub struct AssetsConfig {
     pub route: String,
     /// `assets.subscription`: defaults for every subscription entry.
     pub subscription: SubscriptionDefaults,
+    /// 远程 `.dae` 规则的定时刷新设置。
+    pub rules: RuleDefaults,
+}
+
+/// `assets.rules { interval }`；省略时每天刷新，0 关闭定时刷新。
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct RuleDefaults {
+    pub interval: Option<u64>,
+}
+
+impl RuleDefaults {
+    pub fn interval_secs(&self) -> u64 {
+        self.interval.unwrap_or(86400)
+    }
 }
 
 /// `assets.subscription { … }`; `None` keeps the built-in default.

@@ -1,0 +1,8 @@
+#!/bin/sh
+[ -z "${IPKG_INSTROOT:-}" ] || exit 0
+[ "${IPKG_NO_SCRIPT:-0}" != 1 ] || exit 0
+
+# 保留已有开机设置；新安装没有 rc.d 链接，不会自动启动透明代理。
+if /etc/init.d/honk enabled; then
+	/etc/init.d/honk restart
+fi

@@ -1,6 +1,6 @@
 # Assets 配置参考
 
-`assets {}` 为 geodata、外部 Clash 面板和订阅设置下载默认值。Geodata 的自动更新间隔与校验开关仍由原生 API 的运行时设置管理。
+`assets {}` 为 geodata、外部 Clash 面板、订阅与远程 `.dae` 规则设置下载默认值。Geodata 的自动更新间隔与校验开关仍由原生 API 的运行时设置管理。
 
 ```dae
 assets {
@@ -18,6 +18,9 @@ assets {
         interval: 86400s
         cache: true
     }
+    rules {
+        interval: 24h
+    }
 }
 ```
 
@@ -32,8 +35,17 @@ assets {
 | `subscription.ua` | `honk/<version>` | 订阅条目的默认请求 User-Agent。 |
 | `subscription.interval` | `86400s` | 默认定期刷新间隔；`0` 关闭定期刷新。 |
 | `subscription.cache` | `true` | 条目正文的默认缓存开关，仍受 `global.store_subscribe` 限制。 |
+| `rules.interval` | `86400s` | 文件模式远程 `.dae` 规则的统一刷新间隔；支持秒数及 `s`/`m`/`h`。`0` 关闭定时刷新，启动和显式重载仍刷新。 |
+
+远程规则直连下载，不继承 `assets.route`。内容变化且校验通过后自动热重载；失败保留当前规则，内容相同不重写缓存。定时器与手动重载串行，一轮结束后重新计时；本地有未重载编辑时跳过本轮。用法见[远程规则说明](../operations/modular-additions.md#远程规则)。
 
 条目中的设置优先于 `assets.subscription` 和 `assets.route`；`geodata.route` 与 `ui.route` 优先于 `assets.route`；两处均未设置时才使用内置默认值。条目语法见[订阅参考](./subscription.md)，已存储的 geodata 设置见 [API 参考](./api.md#geodata-来源与自动更新)。
+
+## 首次 Geo 下载
+
+本分支的内置源使用完整 `geosite.dat` 和精简 `geoip-lite.dat`；GeoIP 本地仍保存为 `geoip.dat`。首次下载与后续默认更新采用相同来源，自定义 URL 继续优先。
+
+带 `native-api` 的构建会在启动路由前补齐规则需要的缺失文件。首次下载要求 `assets.geodata.route: direct`，已有文件继续使用；非直连出口不被自动绕过。启用原生 API、`config_write` 和自动更新时，还可预下载未引用的缺失资产。必需文件下载或分类校验失败时中止启动，非必需预下载失败只记录警告。没有状态数据库时需要显式配置 URL。完整行为和 OpenWrt 去依赖补丁见[模块说明](../operations/modular-additions.md#首次-geo-下载)。
 
 以下 `experimental` 字段仍作为别名读取，每次出现都会在所在行产生一条 `legacy-assets-key` 警告。旧配置项的值非空且同时设置了对应的新配置项时，报 `conflicting-assets-setting`；旧值为空时不冲突。没有对应 `assets` 子块出口时，旧出口设置仍可覆盖 `assets.route`。
 

@@ -48,6 +48,21 @@ for path in "$dist"/*.deb "$dist"/*.rpm "$dist"/*.pkg.tar.zst; do
   others+=("| \`$file\` | $kind package of \`jemalloc-fullapi-${BASH_REMATCH[1]}-musl\` |")
 done
 
+for path in "$dist"/*.apk "$dist"/*.ipk; do
+  [[ -e $path ]] || continue
+  file=${path##*/}
+  if [[ ! $file =~ ^honk-.+-openwrt-25\.12-(x86_64|aarch64_generic|aarch64_cortex-a53|aarch64_cortex-a72|aarch64_cortex-a76)\.(apk|ipk)$ ]]; then
+    printf '::error::无法识别 OpenWrt 安装包名称：%s\n' "$file" >&2
+    exit 1
+  fi
+  package_arch=${BASH_REMATCH[1]}
+  case ${BASH_REMATCH[2]} in
+    apk) kind='APK v3（apk add）' ;;
+    ipk) kind='IPK（opkg install）' ;;
+  esac
+  others+=("| \`$file\` | OpenWrt 25.12 $kind，\`$package_arch\`，完整 API / UI |")
+done
+
 if (( ${#rows[@]} == 0 )); then
   printf '::error::No honk-core archives in %s\n' "$dist" >&2
   exit 1
