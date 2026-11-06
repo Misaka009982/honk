@@ -3166,7 +3166,7 @@ mod subscription_entry_options {
 #[cfg(test)]
 mod assets_block {
     use crate::Config;
-    use crate::diagnostic::DetailedDiagnostic;
+    use crate::diagnostic::{DetailedDiagnostic, SafeValue, Severity};
     use crate::parser::parse_dae_config_with_detailed_diagnostics;
 
     const GROUP: &str = "group {\n proxy { policy: min_moving_avg }\n}\n";
@@ -3203,11 +3203,39 @@ mod assets_block {
         }
         let (invalid, diagnostics) = parse("assets { rules { interval: invalid } }");
         assert_eq!(invalid.assets.rules.interval_secs(), 0);
-        assert!(
-            diagnostics
-                .iter()
-                .any(|row| row.setting.to_string() == "assets.rules.interval")
+        assert_eq!(diagnostics.len(), 1);
+        let diagnostic = &diagnostics[0];
+        assert_eq!(diagnostic.setting.to_string(), "assets.rules.interval");
+        assert_eq!(
+            diagnostic.message,
+            "远程规则刷新间隔无效；回退到 0s，关闭定时刷新"
         );
+    }
+
+    #[test]
+    fn invalid_asset_defaults_keep_field_locations_and_redact_values() {
+        let input = "assets {\n rules {\n  interval: PRIVATE_RULE_INTERVAL\n }\n subscription {\n  interval: PRIVATE_SUB_INTERVAL\n  cache: PRIVATE_CACHE\n }\n}\n";
+        let (config, diagnostics) = parse(input);
+        assert_eq!(config.assets.rules.interval_secs(), 0);
+        assert_eq!(config.assets.subscription.interval, Some(0));
+        assert_eq!(config.assets.subscription.cache, Some(true));
+        let expected = [
+            ("assets.rules.interval", 3, "PRIVATE_RULE_INTERVAL"),
+            ("assets.subscription.interval", 6, "PRIVATE_SUB_INTERVAL"),
+            ("assets.subscription.cache", 7, "PRIVATE_CACHE"),
+        ];
+        assert_eq!(diagnostics.len(), expected.len());
+        for (diagnostic, (setting, line, value)) in diagnostics.iter().zip(expected) {
+            assert_eq!(diagnostic.setting.to_string(), setting);
+            assert_eq!(diagnostic.line, Some(line));
+            assert_eq!(&input[diagnostic.span.clone().unwrap()], value);
+            assert_eq!(diagnostic.code, "legacy-config-warning");
+            assert_eq!(diagnostic.severity, Severity::Warning);
+            assert_eq!(diagnostic.value, SafeValue::Redacted);
+            assert!(!diagnostic.terminal);
+            assert_eq!(diagnostic.to_legacy().setting, setting);
+        }
+        assert!(!format!("{diagnostics:?}").contains("PRIVATE_"));
     }
 
     #[test]

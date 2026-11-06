@@ -39,6 +39,8 @@ assets {
 | `subscription.cache` | `true` | Default per-entry body caching, subject to `global.store_subscribe`. |
 | `rules.interval` | `86400s` | 文件模式远程 `.dae` 规则的统一刷新间隔，支持秒数及 `s`/`m`/`h`；`0` 关闭定时刷新，启动与显式重载仍刷新。 |
 
+`.dae` 中无效的 `assets.rules.interval` 或 `assets.subscription.interval` 会警告并回退到 `0s`，关闭对应定时刷新；无效的 `assets.subscription.cache` 回退到 `true`。诊断保留完整字段路径和原始位置，配置值始终脱敏。
+
 远程规则始终直连，不继承 `assets.route`。内容变化且校验通过后自动热重载；下载失败保留旧规则，未变化不写缓存或重载，本地未重载的编辑会阻止本轮自动更新。定时刷新和手动重载串行，一轮完成后重新计时。详见[模块说明](../../zh/operations/modular-additions.md#远程规则)。
 
 An entry's options override `assets.subscription` and `assets.route`; `geodata.route` and `ui.route` override `assets.route`. Built-in defaults apply only where neither of them sets a value. See the [subscription reference](./subscription.md) for entry syntax and the [API reference](./api.md#geodata-sources-and-automatic-updates) for stored geodata settings.

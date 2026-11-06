@@ -37,6 +37,8 @@ assets {
 | `subscription.cache` | `true` | 条目正文的默认缓存开关，仍受 `global.store_subscribe` 限制。 |
 | `rules.interval` | `86400s` | 文件模式远程 `.dae` 规则的统一刷新间隔；支持秒数及 `s`/`m`/`h`。`0` 关闭定时刷新，启动和显式重载仍刷新。 |
 
+`.dae` 中无效的 `assets.rules.interval` 或 `assets.subscription.interval` 会警告并回退到 `0s`，关闭对应定时刷新；无效的 `assets.subscription.cache` 回退到 `true`。诊断保留完整字段路径和原始位置，配置值始终脱敏。
+
 远程规则直连下载，不继承 `assets.route`。内容变化且校验通过后自动热重载；失败保留当前规则，内容相同不重写缓存。定时器与手动重载串行，一轮结束后重新计时；本地有未重载编辑时跳过本轮。用法见[远程规则说明](../operations/modular-additions.md#远程规则)。
 
 条目中的设置优先于 `assets.subscription` 和 `assets.route`；`geodata.route` 与 `ui.route` 优先于 `assets.route`；两处均未设置时才使用内置默认值。条目语法见[订阅参考](./subscription.md)，已存储的 geodata 设置见 [API 参考](./api.md#geodata-来源与自动更新)。
