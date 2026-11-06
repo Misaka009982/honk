@@ -1,0 +1,21 @@
+# 安装后默认不开启服务；按设备接口和节点配置完成后再启动。
+# 以下配置仅直连本机流量，网关转发需自行配置 lan_interface。
+global {
+    wan_interface: auto
+    log_level: info
+    auto_config_kernel_parameter: true
+    data_dir: '/etc/honk/data'
+}
+
+assets {
+    geodata {
+        route: direct
+    }
+    rules {
+        interval: 24h
+    }
+}
+
+routing {
+    fallback: direct
+}

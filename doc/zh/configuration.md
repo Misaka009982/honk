@@ -48,6 +48,10 @@ include {
 
 入口文件自身的分段始终最先合并，不受 `include` 块位置影响；之后依次合并每个被包含文件及其后代。后出现的标量键覆盖先前值。节点、订阅、组、DNS 上游、固定 TTL 与路由规则等集合条目按合并顺序追加。
 
+### 远程 `.dae` 规则
+
+文件模式还可写 `include { 'https://example.org/rules.dae' }`。远程正文只能含 `routing` 块，沿用以上合并顺序。启动及显式重载时直连刷新，离线解析与校验只读取入口同级 `.honk-remote-rules` 缓存。下载或候选校验失败时使用有效旧缓存；无缓存则拒绝启动或重载。缓存来源在原生 API 中只读。`assets.rules.interval` 默认为 `24h`，`0` 关闭定时刷新；变化且通过校验后自动热重载，本地未重载编辑会阻止本轮刷新。规则格式不接受 Clash `payload` 或 sing-box `.srs`。示例、大小限制及首次添加流程见[模块说明](./operations/modular-additions.md#远程规则)。
+
 ## 运行时数据目录
 
 `global.data_dir` 是运行时状态与相对运行时资源的进程级根目录，默认值为 `/var/lib/honk`，必须是非空绝对路径。修改后需重启。
@@ -314,7 +318,7 @@ dns {
 
 **原生 API。** `native-api` 需显式编译：以 `--features native-api`（或 `native-ui`）构建；full 与 `-native-api` 发布产物包含它。listener 须配置 `experimental.native_api.enabled: true`，并满足以下条件之一：配置 bearer `secret`、设置 `password_auth: true`，或在 loopback `listen` 上设置 `allow_anonymous_loopback: true`。honk 不限制 `secret` 的最短长度，应使用足够长的随机值。默认监听地址为 `127.0.0.1:9527`，匿名 loopback 访问仅供本地开发。所有生效的原生字段均需重启。用户态观测、事件与有界历史独立于 Clash；流量/内存历史默认保留最多 600 点/600 秒。可选 `ui` 目录需已有可读 `index.html`，也可用 `--features native-ui` 与 `ui: embedded` 内嵌固定版本的 doona；运行时不下载或构建 UI。`ui: embedded-lite` 选择更轻量的 doona lite 预览版，同样需要 `native-ui`。
 
-`.dae` 仍是唯一配置权威。启动时捕获来源、离线校验和 reload 共用引擎。配置读取返回已接受正文，仅遮蔽监听凭据值，包括重复、被覆盖的值及其在其他位置的出现。凭据源仍只读，哈希仍对应原始字节。源 `path` 保持相对路径，`absolute_path` 另行提供规范化绝对路径。获准访问的匿名 loopback 请求与 bearer 认证请求读取相同的数据。`config_write` 默认 false，要求非空 secret 或 `password_auth`。主文件节点/provider 创建删除、授权源 PUT 和受限组 PATCH 复用该权威。启用 `config_write` 后，所有已接受的非凭据 include 均可编辑源，但不授予专用条目删除权限。配置的 geodata 更新将不可变的已验证字节交给同一 reload owner。激活失败不会自动回滚已写字节，应避免并发外部编辑。详见[原生设置](./reference/experimental.md#native_api)与 [主文件条目与 geodata 契约](./reference/api.md#主文件条目与-geodata-管理)。
+`.dae` 仍是唯一配置权威。启动时捕获来源、离线校验和 reload 共用引擎。配置读取返回已接受正文，仅遮蔽监听凭据值，包括重复、被覆盖的值及其在其他位置的出现。凭据源仍只读，哈希仍对应原始字节。源 `path` 保持相对路径，`absolute_path` 另行提供规范化绝对路径。获准访问的匿名 loopback 请求与 bearer 认证请求读取相同的数据。`config_write` 默认 false，要求非空 secret 或 `password_auth`。主文件节点/provider 创建删除、授权源 PUT 和受限组 PATCH 复用该权威。启用 `config_write` 后，所有已接受的非凭据本地 include 均可编辑源，远程规则缓存保持只读，但不授予专用条目删除权限。配置的 geodata 更新将不可变的已验证字节交给同一 reload owner。激活失败不会自动回滚已写字节，应避免并发外部编辑。详见[原生设置](./reference/experimental.md#native_api)与 [主文件条目与 geodata 契约](./reference/api.md#主文件条目与-geodata-管理)。
 
 **Clash API。** 非空的 `experimental.clash_api.external_controller` 会启用服务器。除非防火墙和非空 `secret` 已提供保护，否则应保持 loopback 绑定；空 secret 会关闭 API 认证。相对 `external_ui` 依次优先使用 `data_dir` 下、`/var/share/honk` 下和工作目录中的已有目录；都不存在时，在 `data_dir` 下下载 dashboard。`assets.ui.url` 选择 ZIP 来源，`assets.ui.route` 选择下载出口，未设置时出口继承 `assets.route`。没有配置 URL 或出口时，分别使用内置 URL 和普通流量路由。`HONK_UI_DOWNLOAD_URL` 可覆盖 ZIP URL。
 

@@ -1,5 +1,7 @@
 # Subscription reference
 
+本分支增加 Sub-Store 裸 JSON、AnyTLS URI 与 Clash 字段兼容，以及脱敏刷新失败详情；新增行为见[模块说明](../../zh/operations/modular-additions.md#sub-store-订阅)。
+
 `subscription {}` configures remote node lists.
 
 ## `subscription {}` syntax

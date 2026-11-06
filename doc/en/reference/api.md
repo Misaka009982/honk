@@ -1,5 +1,7 @@
 # Native API, Clash API and `/stats` reference
 
+本分支扩展 provider 的脱敏 `fetch_failed` 详情，将远程规则缓存来源设为只读，并将默认 GeoIP 源改为 `geoip-lite.dat`；新增行为见[模块说明](../../zh/operations/modular-additions.md)。
+
 honk provides a native HTTP API, a Clash-compatible HTTP API and a userspace statistics snapshot. The native and Clash APIs have independent features, listeners, credentials, and HTTP boundaries. Both reuse the same engine handles and userspace statistics.
 
 ## Native API

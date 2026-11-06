@@ -4,7 +4,7 @@
 
 **用 Rust 编写的实验性 Linux 透明代理引擎。**
 
-**[文档](https://daeuniverse.org/zh-CN/honk/)** / **[网页界面示范](https://demo.daeuniverse.org/)** / **[下载](https://github.com/daeuniverse/honk/releases)**
+**[文档](https://daeuniverse.org/zh-CN/honk/)** / **[网页界面示范](https://demo.daeuniverse.org/)** / **[下载](https://github.com/Misaka009982/honk/releases)**
 
 [English](README.md) / 简体中文
 
@@ -15,6 +15,35 @@
 > **早期 alpha，不建议用于生产。** 可能发生破坏性变更，部分功能尚未完成，真实环境验证仍然有限。
 
 honk 的 eBPF 数据面和配置语法参考 dae 的设计，出站组与 Clash API 参考 sing-box 的设计。它是独立实现，并非任一项目的移植。
+
+## 本项目修改
+
+本仓库基于上游 **`v0.1.0-beta.5`（`88d470c6`）**，扩展功能尽量集中在独立模块，方便同步上游。下载本项目产物请使用 [Misaka009982/honk Releases](https://github.com/Misaka009982/honk/releases)，上游既有发布不包含这些修改。
+
+- **Sub-Store 兼容**：支持 URI/Base64、Clash/Mihomo 和裸节点数组；AnyTLS 的密码、SNI、ALPN、证书校验及 UDP 参数进入原生拨号模型，同时提供脱敏失败原因。
+- **远程 `.dae` 规则**：HTTP(S) `include`、有效缓存和自动热重载。`assets.rules.interval` 默认 `24h`，`0` 关闭定时刷新；失败保留当前规则。
+- **Geo 首次下载**：按需下载 **GeoIP lite** 与完整 **Geosite**，本地仍保存为 `geoip.dat` / `geosite.dat`；自定义来源优先。
+- **OpenWrt 25.12**：构建 APK v3 与 OPKG/IPK，包含 procd 服务和配置保留，不依赖 `v2ray-*` 数据包；提供一键安装脚本。
+
+模块接入位置与限制见[修改说明](doc/zh/operations/modular-additions.md)。本地仅完成静态核查，编译、回归测试和设备联网验收待 Linux/OpenWrt 环境执行。
+
+## OpenWrt 一键安装
+
+适用 OpenWrt / ImmortalWrt **25.12、Linux 6.12+**，支持 x86_64 与文档列出的 ARM64 架构。在路由器上以 root 执行，先完整下载脚本，下载成功后安装：
+
+```sh
+curl -fL https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/install.sh -o /tmp/honk-install.sh && sh /tmp/honk-install.sh
+```
+
+没有 `curl` 时：
+
+```sh
+wget -O /tmp/honk-install.sh https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/install.sh && sh /tmp/honk-install.sh
+```
+
+脚本自动识别 APK/OPKG 和包架构，优先选择带匹配安装包的正式版本，无正式版本时选择 beta/rc 等预发布，核对 SHA-256 后安装；Debug 需显式指定 `HONK_VERSION=debug`。可以执行 `HONK_VERSION=v0.1.0-beta.5 sh /tmp/honk-install.sh` 指定已经发布的版本。首次安装不启动服务；配置 `/etc/honk/config.dae` 后执行 `/etc/init.d/honk enable` 与 `/etc/init.d/honk start`。升级由包管理器保留配置，已启用服务会重启。
+
+上面的 `main` 地址和 Release 安装包需在本分支合并并发布后可用；只有源码尚未发布安装包时，脚本会明确退出。脚本参考 [kenzok8/openwrt-honk](https://github.com/kenzok8/openwrt-honk/blob/main/scripts/install.sh) 的安装流程。更多参数、手动安装和构建说明见 [OpenWrt 安装文档](doc/zh/operations/openwrt-packages.md)。
 
 ## 功能概览
 
@@ -28,7 +57,7 @@ honk 的 eBPF 数据面和配置语法参考 dae 的设计，出站组与 Clash 
 
 ## 安装
 
-从 [Releases](https://github.com/daeuniverse/honk/releases) 下载适合目标平台的归档。发布物支持 x86_64 与 aarch64 Linux，一般用途建议选择 `full`。
+从 [Releases](https://github.com/Misaka009982/honk/releases) 下载适合目标平台的归档。发布物支持 x86_64 与 aarch64 Linux，一般用途建议选择 `full`。
 
 | 构建 | 原生 API | Clash API | 内嵌 doona 与 doona lite |
 | --- | --- | --- | --- |
@@ -38,7 +67,7 @@ honk 的 eBPF 数据面和配置语法参考 dae 的设计，出站组与 Clash 
 
 各构建均提供静态链接的 musl 版本，`full` 另提供链接 glibc 的 `gnu` 版本。名称含 `stock` 的归档使用系统分配器而非 mimalloc。每个版本的 Downloads 一节列出校验和及构建来源证明。
 
-Debian、Ubuntu、Fedora、openSUSE 和 Arch Linux 的软件包安装见[安装指南](https://daeuniverse.org/zh-CN/honk/installation/)。OpenWrt 用户可使用 [daeuniverse 软件源](https://daeuniverse.org/zh-CN/openwrt/)。
+Debian、Ubuntu、Fedora、openSUSE 和 Arch Linux 的软件包安装见[安装指南](https://daeuniverse.org/zh-CN/honk/installation/)。本分支的 OpenWrt APK/IPK 与一键安装见[安装文档](doc/zh/operations/openwrt-packages.md)。
 
 自行编译请按[从源码构建](doc/zh/how-to-start.md#从源码构建)准备。发布二进制内嵌 eBPF；仅执行 `cargo build --release` 不会启用真实数据面。
 
@@ -74,11 +103,11 @@ honk 可配合以下两类网页界面使用：
 
 无 root 的用户态开发可使用 [mock 模式](doc/zh/how-to-start.md#无-root-开发)。`--mock-ebpf` 不会拦截流量，不能代替数据面测试。
 
-滚动的 [Debug 预发布](https://github.com/daeuniverse/honk/releases/tag/debug)提供来自 `main` 的最新 `debug.*` 测试构建。它们使用 release profile，并非 Cargo debug profile；保留期限与发布流程见[发布规则](.agents/rules/release.md)。
+滚动 [Debug 预发布](https://github.com/Misaka009982/honk/releases/tag/debug)在本仓库发布 `debug.*` 构建后更新。使用 release profile；保留期限与发布流程见[发布规则](.agents/rules/release.md)。
 
 ## 报告问题
 
-代理、路由和 DNS 问题请提交至 [honk issues](https://github.com/daeuniverse/honk/issues)；网页界面问题请提交至 [doona issues](https://github.com/Zakkaus/doona/issues)。
+本分支的代理、路由、DNS 和安装问题请提交至 [Misaka009982/honk issues](https://github.com/Misaka009982/honk/issues)；网页界面问题请提交至 [doona issues](https://github.com/Zakkaus/doona/issues)。
 
 安全漏洞请按 [SECURITY.md](.github/SECURITY.md) 报告。
 

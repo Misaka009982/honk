@@ -1,0 +1,36 @@
+diff --git a/honk/Makefile b/honk/Makefile
+--- a/honk/Makefile
++++ b/honk/Makefile
+@@ -71,7 +71,6 @@ define Package/honk
+-  # Its BTF comes from vmlinux-btf, as for dae. The geo packages ship the dat
+-  # files; this package links them into /usr/share/honk, which honk searches
+-  # before the dae locations.
++  # BTF 由 vmlinux-btf 提供。Geo 文件由带首次下载模块的 honk 管理，
++  # 保存在配置的 data_dir 中，不再依赖系统 Geo 数据包。
+   DEPENDS:=+libstdcpp +kmod-veth +kmod-sched-core +kmod-sched-bpf \
+            +kmod-nft-core +kmod-nft-queue +kmod-nfnetlink-queue \
+-           +kmod-nf-conntrack +vmlinux-btf +v2ray-geoip +v2ray-geosite
++           +kmod-nf-conntrack +vmlinux-btf
+ endef
+@@ -154,8 +153,3 @@ define Package/honk/install
+ 	$(INSTALL_DIR) $(1)/lib/upgrade/keep.d
+ 	printf '%s\n' '/etc/honk/data/' > $(1)/lib/upgrade/keep.d/honk
+-	# v2ray-geoip/geosite install the files under /usr/share/v2ray. honk's
+-	# find_dat looks in /usr/share/honk before /usr/share/dae.
+-	$(INSTALL_DIR) $(1)/usr/share/honk
+-	$(LN) ../v2ray/geoip.dat $(1)/usr/share/honk/geoip.dat
+-	$(LN) ../v2ray/geosite.dat $(1)/usr/share/honk/geosite.dat
+ endef
+diff --git a/honk/files/config.dae b/honk/files/config.dae
+--- a/honk/files/config.dae
++++ b/honk/files/config.dae
+@@ -39,3 +39,9 @@ global {
+ }
+ 
++assets {
++    geodata {
++        route: direct
++    }
++}
++
+ dns {

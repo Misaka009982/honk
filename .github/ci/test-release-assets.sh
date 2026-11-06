@@ -12,6 +12,7 @@ touch "$work/dist/honk-core-v1.2.3-x86_64-unknown-linux-gnu-full.tar.gz" \
   "$work/dist/honk-core-debug-x86_64-unknown-linux-musl-clash-api.tar.gz" \
   "$work/dist/doona-source-0.1.0.tar.gz"
 touch "$work/dist/honk-core-v1.2.3-x86_64.deb" "$work/dist/honk-core-v1.2.3-aarch64.pkg.tar.zst"
+touch "$work/dist/honk-v1.2.3-openwrt-25.12-x86_64.apk" "$work/dist/honk-v1.2.3-openwrt-25.12-aarch64_cortex-a53.ipk"
 bash "$ci_dir/release-assets.sh" "$work/dist" > "$work/notes.md"
 
 expect_line() {
@@ -26,6 +27,8 @@ expect_line '| `honk-core-v1.2.3-aarch64-unknown-linux-musl-stock-native-api.tar
 expect_line '| `honk-core-debug-x86_64-unknown-linux-musl-clash-api.tar.gz` | `mimalloc-clashapi-x86_64-musl` |'
 expect_line '| `honk-core-v1.2.3-x86_64.deb` | Debian and Ubuntu package of `mimalloc-fullapi-x86_64-musl` |'
 expect_line '| `honk-core-v1.2.3-aarch64.pkg.tar.zst` | Arch Linux package of `mimalloc-fullapi-aarch64-musl` |'
+expect_line '| `honk-v1.2.3-openwrt-25.12-x86_64.apk` | OpenWrt 25.12 APK v3（apk add），`x86_64`，完整 API / UI |'
+expect_line '| `honk-v1.2.3-openwrt-25.12-aarch64_cortex-a53.ipk` | OpenWrt 25.12 IPK（opkg install），`aarch64_cortex-a53`，完整 API / UI |'
 
 # A name the table cannot classify fails the release instead of shipping an unexplained file.
 touch "$work/dist/honk-core-v1.2.3-riscv64-unknown-linux-musl-full.tar.gz"

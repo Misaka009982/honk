@@ -1,5 +1,7 @@
 # The honk dialect of dae configuration
 
+本分支扩展 `include` 的 HTTP(S) 规则来源，`assets.rules.interval` 默认 `24h`，`0` 关闭定时刷新；下载与缓存边界见[模块说明](../../zh/operations/modular-additions.md#远程规则)；其余方言规则沿用下文。
+
 honk reads a dialect of dae configuration syntax. Where the same text has different meanings in honk and dae, honk's documented behavior is the contract. The dae column covers only its grammar (`dae_config.g4`), not value conversion.
 
 ## Lexical rules

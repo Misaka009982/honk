@@ -4,7 +4,7 @@
 
 **An experimental transparent-proxy engine for Linux, written in Rust.**
 
-**[Documentation](https://daeuniverse.org/honk/)** / **[Web UI demo](https://demo.daeuniverse.org/)** / **[Releases](https://github.com/daeuniverse/honk/releases)**
+**[Documentation](https://daeuniverse.org/honk/)** / **[Web UI demo](https://demo.daeuniverse.org/)** / **[Releases](https://github.com/Misaka009982/honk/releases)**
 
 English / [简体中文](README.zh.md)
 
@@ -15,6 +15,35 @@ English / [简体中文](README.zh.md)
 > **Early alpha, not recommended for production.** Expect breaking changes, incomplete features, and limited real-world validation.
 
 honk follows the design of dae's eBPF datapath and configuration syntax, and of sing-box's outbound groups and Clash API. It is an independent implementation, not a port of either project.
+
+## 本项目修改
+
+本仓库基于上游 **`v0.1.0-beta.5`（`88d470c6`）**，扩展功能尽量集中在独立模块，方便同步上游。下载本项目产物请使用 [Misaka009982/honk Releases](https://github.com/Misaka009982/honk/releases)，上游既有发布不包含这些修改。
+
+- **Sub-Store 兼容**：支持 URI/Base64、Clash/Mihomo 和裸节点数组；AnyTLS 的密码、SNI、ALPN、证书校验及 UDP 参数进入原生拨号模型，同时提供脱敏失败原因。
+- **远程 `.dae` 规则**：HTTP(S) `include`、有效缓存和自动热重载。`assets.rules.interval` 默认 `24h`，`0` 关闭定时刷新；失败保留当前规则。
+- **Geo 首次下载**：按需下载 **GeoIP lite** 与完整 **Geosite**，本地仍保存为 `geoip.dat` / `geosite.dat`；自定义来源优先。
+- **OpenWrt 25.12**：构建 APK v3 与 OPKG/IPK，包含 procd 服务和配置保留，不依赖 `v2ray-*` 数据包；提供一键安装脚本。
+
+模块接入位置与限制见[修改说明](doc/zh/operations/modular-additions.md)。本地仅完成静态核查，编译、回归测试和设备联网验收待 Linux/OpenWrt 环境执行。
+
+## OpenWrt 一键安装
+
+适用 OpenWrt / ImmortalWrt **25.12、Linux 6.12+**，支持 x86_64 与文档列出的 ARM64 架构。在路由器上以 root 执行，先完整下载脚本，下载成功后安装：
+
+```sh
+curl -fL https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/install.sh -o /tmp/honk-install.sh && sh /tmp/honk-install.sh
+```
+
+没有 `curl` 时：
+
+```sh
+wget -O /tmp/honk-install.sh https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/install.sh && sh /tmp/honk-install.sh
+```
+
+脚本自动识别 APK/OPKG 和包架构，优先选择带匹配安装包的正式版本，无正式版本时选择 beta/rc 等预发布，核对 SHA-256 后安装；Debug 需显式指定 `HONK_VERSION=debug`。可以执行 `HONK_VERSION=v0.1.0-beta.5 sh /tmp/honk-install.sh` 指定已经发布的版本。首次安装不启动服务；配置 `/etc/honk/config.dae` 后执行 `/etc/init.d/honk enable` 与 `/etc/init.d/honk start`。升级由包管理器保留配置，已启用服务会重启。
+
+上面的 `main` 地址和 Release 安装包需在本分支合并并发布后可用；只有源码尚未发布安装包时，脚本会明确退出。脚本参考 [kenzok8/openwrt-honk](https://github.com/kenzok8/openwrt-honk/blob/main/scripts/install.sh) 的安装流程。更多参数、手动安装和构建说明见 [OpenWrt 安装文档](doc/zh/operations/openwrt-packages.md)。
 
 ## Capabilities
 
@@ -28,7 +57,7 @@ There is no FakeIP engine, full mihomo parity, or Windows/macOS datapath.
 
 ## Install
 
-Download an archive for your platform from [Releases](https://github.com/daeuniverse/honk/releases). Releases cover x86_64 and aarch64 Linux; `full` suits most deployments.
+Download an archive for your platform from [Releases](https://github.com/Misaka009982/honk/releases). Releases cover x86_64 and aarch64 Linux; `full` suits most deployments.
 
 | Build | Native API | Clash API | Embedded doona and doona lite |
 | --- | --- | --- | --- |
@@ -38,7 +67,7 @@ Download an archive for your platform from [Releases](https://github.com/daeuniv
 
 Every build comes as a static musl binary; `full` also comes linked against glibc (`gnu`). Archives with `stock` in the name use the system allocator instead of mimalloc. Each release's Downloads section lists checksums and provenance.
 
-Packages for Debian, Ubuntu, Fedora, openSUSE and Arch Linux are covered in the [installation guide](https://daeuniverse.org/honk/installation/). For OpenWrt, use the [daeuniverse package feed](https://daeuniverse.org/openwrt/).
+Packages for Debian, Ubuntu, Fedora, openSUSE and Arch Linux are covered in the [installation guide](https://daeuniverse.org/honk/installation/). 本分支的 OpenWrt APK/IPK 与一键安装见[安装文档](doc/en/operations/openwrt-packages.md)。
 
 For source builds, follow [Build from source](doc/en/how-to-start.md#build-from-source). Release binaries embed eBPF; plain `cargo build --release` does not enable the real datapath.
 
@@ -74,11 +103,11 @@ The workspace contains configuration, shared eBPF types, NFQUEUE, outbound, core
 
 Use [mock mode](doc/en/how-to-start.md#unprivileged-development) for unprivileged userspace development. `--mock-ebpf` does not intercept traffic or test the datapath.
 
-The rolling [Debug prerelease](https://github.com/daeuniverse/honk/releases/tag/debug) provides the latest `debug.*` build from `main` for testing. These use the release profile, not Cargo's debug profile; retention and publication follow the [release rules](.agents/rules/release.md).
+滚动 [Debug 预发布](https://github.com/Misaka009982/honk/releases/tag/debug)在本仓库发布 `debug.*` 构建后更新。使用 release profile；保留期限与发布流程见[发布规则](.agents/rules/release.md)。
 
 ## Report problems
 
-Report proxy, routing, and DNS problems in [honk issues](https://github.com/daeuniverse/honk/issues); report web interface problems in [doona issues](https://github.com/Zakkaus/doona/issues).
+本分支问题请提交至 [Misaka009982/honk issues](https://github.com/Misaka009982/honk/issues)。Report web interface problems in [doona issues](https://github.com/Zakkaus/doona/issues).
 
 For vulnerabilities, follow [SECURITY.md](.github/SECURITY.md).
 

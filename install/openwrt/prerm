@@ -1,0 +1,9 @@
+#!/bin/sh
+[ -z "${IPKG_INSTROOT:-}" ] || exit 0
+[ "${IPKG_NO_SCRIPT:-0}" != 1 ] || exit 0
+
+/etc/init.d/honk stop || exit 1
+# 升级只停止旧进程，保留开机链接；卸载同时移除链接。
+if [ "${1:-}" != upgrade ]; then
+	/etc/init.d/honk disable
+fi
