@@ -350,7 +350,11 @@ impl ConfigService {
         secrets: &ListenerSecrets,
     ) -> Option<WriteRefusal> {
         let source = &accepted.update.sources[index];
-        if !self.settings.config_write || !self.settings.credentialed() {
+        if !self.settings.config_write
+            || !self.settings.credentialed()
+            || source_path(accepted, index)
+                .starts_with(honk_config::parser::remote::CACHE_DIRECTORY)
+        {
             Some(WriteRefusal::WritesDisabled)
         } else if source.contains_api_secret {
             Some(WriteRefusal::ListenerSecretSource)

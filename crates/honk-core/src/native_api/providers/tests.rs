@@ -416,6 +416,87 @@ async fn failed_initial_fetch_is_error_without_fabricated_success_time() {
     assert_eq!(provider["node_count"], 0);
     assert!(provider["updated_at"].is_null());
     assert_eq!(provider["last_error"]["code"], "fetch_failed");
+    assert_eq!(provider["last_error"]["details"]["stage"], "body_parse");
+    fixture.stop().await;
+    origin.stop().await;
+}
+
+#[tokio::test]
+async fn refresh_failure_reports_http_status_without_losing_active_nodes() {
+    let mut origin = Origin::new().await;
+    let subscription = origin.subscription();
+    let config = Config {
+        subscriptions: vec![subscription.clone()],
+        ..Default::default()
+    };
+    let fixture = Fixture::start(config, None, Some(OLD), &mut origin).await;
+    let accepted: Value = fixture
+        .refresh(subscription.id, "http-error")
+        .await
+        .json()
+        .await
+        .unwrap();
+    let mut socket = origin.next().await;
+    socket.write_all(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 13\r\nConnection: close\r\n\r\nPRIVATE_TOKEN").await.unwrap();
+    drop(socket);
+    let operation = fixture.terminal(&accepted).await;
+    assert_eq!(operation["status"], "failed");
+    assert_eq!(operation["error"]["code"], "fetch_failed");
+    assert_eq!(
+        operation["error"]["details"]["stage"],
+        "http_status_rejected"
+    );
+    assert_eq!(operation["error"]["details"]["http_status"], 403);
+    let provider = fixture
+        .get(&format!("/api/v1/providers/{}", subscription.id))
+        .await;
+    assert_eq!(provider["node_count"], 1);
+    assert_eq!(
+        provider["last_error"]["details"],
+        operation["error"]["details"]
+    );
+    let error = operation["error"].to_string();
+    for secret in [
+        "PRIVATE_TOKEN",
+        "private-query",
+        "private-origin-token",
+        "credential-path",
+    ] {
+        assert!(!error.contains(secret));
+    }
+    fixture.stop().await;
+    origin.stop().await;
+}
+
+#[tokio::test]
+async fn failed_node_parse_reports_original_entry_without_credentials() {
+    let mut origin = Origin::new().await;
+    let subscription = origin.subscription();
+    let config = Config {
+        subscriptions: vec![subscription.clone()],
+        ..Default::default()
+    };
+    let fixture = Fixture::start(config, None, Some(OLD), &mut origin).await;
+    let accepted: Value = fixture
+        .refresh(subscription.id, "parse-error")
+        .await
+        .json()
+        .await
+        .unwrap();
+    respond(
+        origin.next().await,
+        "# profile\nanytls://PRIVATE_PASSWORD@example.com:443?security=none&type=tcp&tls=0",
+    )
+    .await;
+    let operation = fixture.terminal(&accepted).await;
+    assert_eq!(operation["error"]["details"]["stage"], "body_parse");
+    assert_eq!(operation["error"]["details"]["entry_index"], 2);
+    assert_eq!(
+        operation["error"]["details"]["diagnostic_code"],
+        "malformed-subscription-entry"
+    );
+    assert!(!operation["error"].to_string().contains("PRIVATE_PASSWORD"));
+    assert!(!operation["error"].to_string().contains("example.com"));
     fixture.stop().await;
     origin.stop().await;
 }

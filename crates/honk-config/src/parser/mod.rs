@@ -8,6 +8,7 @@ mod entries;
 mod experimental;
 mod groups;
 pub mod lexer;
+pub mod remote;
 mod routing;
 
 mod read;
@@ -118,10 +119,11 @@ fn parse_dae_file_inner(
     overlay: &HashMap<PathBuf, Arc<str>>,
     limits: SourceLimits,
     entry_input: Option<Arc<str>>,
-    disk: bool,
+    mode: remote::LoadMode,
     diagnostics: &mut ParserDiagnostics<'_>,
     semantic: &mut bool,
 ) -> Result<LoadedConfig, ParseFailure> {
+    let disk = !matches!(mode, remote::LoadMode::Memory);
     let entry = if !disk {
         sources::lexical_source_path(path)
     } else if overlay.contains_key(path) {
@@ -165,6 +167,7 @@ fn parse_dae_file_inner(
         supplied_entry: entry_input,
         overlay,
         disk,
+        skip_remote: matches!(mode, remote::LoadMode::Local),
         limits,
         bytes: 0,
         sources: Vec::new(),
@@ -250,6 +253,7 @@ struct IncludeLoader<'a> {
     overlay: &'a HashMap<PathBuf, Arc<str>>,
     /// When false the overlay is the whole source set and no path is resolved on disk.
     disk: bool,
+    skip_remote: bool,
     limits: SourceLimits,
     bytes: usize,
     sources: Vec<SourceSnapshot>,
@@ -306,6 +310,9 @@ impl IncludeLoader<'_> {
                 )?
             };
             let loaded_at = std::time::SystemTime::now();
+            if path.parent() == Some(self.entry_dir.join(remote::CACHE_DIRECTORY).as_path()) {
+                remote::validate(&input)?;
+            }
             sources::check_budget(
                 self.limits,
                 self.sources.len(),
@@ -346,6 +353,9 @@ impl IncludeLoader<'_> {
             // dae merges own sections before descendants, in declaration/glob order.
             for pattern in patterns {
                 diagnostics.set_source(source.clone());
+                if remote::is_remote(&pattern) && self.skip_remote {
+                    continue;
+                }
                 for child in self.expand_pattern(&pattern, &source)? {
                     diagnostics.set_source(source.clone());
                     documents.extend(self.expand_file(&child, Some(source_index), diagnostics)?);
@@ -362,6 +372,30 @@ impl IncludeLoader<'_> {
         pattern: &str,
         source: &crate::diagnostic::SourceRef,
     ) -> Result<Vec<PathBuf>, ParseFailure> {
+        if remote::is_remote(pattern) {
+            let path = remote::cache_path(&self.entry_dir, pattern)?;
+            let canonical = if self.disk {
+                sources::canonical_overlay_path(&path)
+            } else {
+                Ok(path.clone())
+            }
+            .map_err(|_| {
+                sources::source_error(
+                    source.clone(),
+                    "remote-rules-unavailable",
+                    "远程规则缓存不可用；请启动引擎获取规则或恢复上一次有效缓存",
+                )
+            })?;
+            if canonical != path {
+                return Err(sources::source_error(
+                    source.clone(),
+                    "config-include-escape",
+                    "远程规则缓存不能使用符号链接或越过入口目录",
+                )
+                .into());
+            }
+            return Ok(vec![path]);
+        }
         let pattern_path = Path::new(pattern);
         let pattern = if pattern_path.is_absolute() {
             pattern_path.to_path_buf()

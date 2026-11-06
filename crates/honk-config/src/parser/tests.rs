@@ -3186,6 +3186,31 @@ mod assets_block {
     }
 
     #[test]
+    fn remote_rule_interval_is_independent_and_round_trips() {
+        let (defaults, diagnostics) = parse("routing { fallback: direct }");
+        assert!(diagnostics.is_empty());
+        assert_eq!(defaults.assets.rules.interval_secs(), 86400);
+        for (value, seconds) in [("24h", 86400), ("15m", 900), ("30s", 30), ("0", 0)] {
+            let (config, diagnostics) = parse(&format!(
+                "assets {{ rules {{ interval: {value} }} subscription {{ interval: 120s }} }}"
+            ));
+            assert!(diagnostics.is_empty(), "{diagnostics:?}");
+            assert_eq!(config.assets.rules.interval_secs(), seconds);
+            assert_eq!(config.assets.subscription.interval, Some(120));
+            let json = serde_json::to_string(&config).unwrap();
+            let restored: Config = serde_json::from_str(&json).unwrap();
+            assert_eq!(restored.assets.rules, config.assets.rules);
+        }
+        let (invalid, diagnostics) = parse("assets { rules { interval: invalid } }");
+        assert_eq!(invalid.assets.rules.interval_secs(), 0);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|row| row.setting.to_string() == "assets.rules.interval")
+        );
+    }
+
+    #[test]
     fn every_key_reaches_the_field_its_download_reads() {
         let (config, diagnostics) = parse(&format!(
             "{GROUP}assets {{\n route: proxy\n geodata {{\n  geosite: 'https://example.test/geosite.dat'\n  geoip: 'https://example.test/geoip.dat'\n  route: direct\n }}\n ui {{\n  url: 'https://example.test/ui.zip'\n  route: proxy\n }}\n subscription {{\n  ua: 'clash.meta'\n  interval: 3600s\n  cache: false\n }}\n}}"

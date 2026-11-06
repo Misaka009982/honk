@@ -1,6 +1,7 @@
 mod completion;
 mod geodata;
 mod managed_entries;
+mod remote_rules;
 mod revisions;
 #[cfg(test)]
 mod tests;
@@ -82,9 +83,27 @@ impl ConfigService {
                 subscriptions,
                 stopping: stopping.clone(),
             };
+            let mut rules_schedule = crate::remote_rules::schedule::Schedule::default();
             loop {
-                let work = tokio::select! { biased; _=stopping.changed()=>break, work=receiver.recv()=>match work{Some(work)=>work,None=>break} };
+                rules_schedule.configure(worker.remote_rules_interval().await);
+                let work = tokio::select! {
+                    biased;
+                    _ = stopping.changed() => break,
+                    _ = rules_schedule.wait() => {
+                        worker.refresh_remote_rules().await;
+                        rules_schedule.finish();
+                        continue;
+                    }
+                    work = receiver.recv() => match work {
+                        Some(work) => work,
+                        None => break,
+                    }
+                };
+                let reload = matches!(&work, Work::Sighup | Work::Reload { .. });
                 worker.perform(work).await;
+                if reload {
+                    rules_schedule.finish();
+                }
             }
             receiver.close();
             while let Some(work) = receiver.recv().await {
@@ -383,6 +402,29 @@ impl Worker {
         &self,
     ) -> Result<(Config, Option<SourceUpdate>, Vec<DetailedDiagnostic>), ApiError> {
         let store = self.store.clone();
+        if store.dependency_root().is_some() {
+            let mut stopping = self.stopping.clone();
+            tokio::select! {
+                biased;
+                _ = stopping.wait_for(|stopped| *stopped) => return Err(unavailable()),
+                result = crate::remote_rules::prepare(store.entry()) => {
+                    result.map_err(|_| ApiError::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        ErrorCode::UnsupportedValue,
+                        "远程规则无法下载或通过校验，当前配置保持不变。",
+                        None,
+                    ))?;
+                }
+            }
+        }
+        self.load_prepared(None).await
+    }
+
+    async fn load_prepared(
+        &self,
+        update: Option<crate::remote_rules::Update>,
+    ) -> Result<(Config, Option<SourceUpdate>, Vec<DetailedDiagnostic>), ApiError> {
+        let store = self.store.clone();
         let source_managed = self.source_managed;
         // Diagnostics name the accepted source IDs, as a write to the same file would.
         let accepted = self
@@ -432,9 +474,15 @@ impl Worker {
                 config.ensure_builtin_nodes();
                 return Ok((config, None, diagnostics));
             }
-            let loaded = store
-                .load(&HashMap::new(), &mut diagnostics)
-                .map_err(|error| reject(error, &diagnostics, &[]))?;
+            let loaded = match update {
+                Some(update) => {
+                    diagnostics = update.diagnostics;
+                    update.loaded
+                }
+                None => store
+                    .load(&HashMap::new(), &mut diagnostics)
+                    .map_err(|error| reject(error, &diagnostics, &[]))?,
+            };
             // Reload admission permits unavailable geo assets; failed fingerprint capture
             // must not tighten that contract or retain a stale dependency baseline.
             let dependencies = capture

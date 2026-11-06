@@ -139,10 +139,15 @@ impl Provider {
             },
             last_error: load.error.map(|code| ProviderError {
                 code,
-                message: error_message(code).unwrap_or(
-                    "Provider loading or runtime publication did not complete successfully.",
-                ),
-                details: rejection_details(load.rejection),
+                message: error_message(code)
+                    .or_else(|| load.failure.map(|failure| failure.reason))
+                    .unwrap_or(
+                        "Provider loading or runtime publication did not complete successfully.",
+                    ),
+                details: load
+                    .failure
+                    .map(|failure| json!(failure))
+                    .or_else(|| rejection_details(load.rejection)),
             }),
             download: None,
         }
@@ -544,12 +549,14 @@ impl RefreshReport for RefreshOperation {
                 }
             }
             Err(code) => {
+                let failure = (code == "fetch_failed").then_some(load.failure).flatten();
                 self.operations.fail(
                     id,
                     code,
                     error_message(code)
+                        .or_else(|| failure.map(|failure| failure.reason))
                         .unwrap_or("Provider refresh did not complete successfully."),
-                    None,
+                    failure.map(|failure| json!(failure)),
                 );
             }
         }

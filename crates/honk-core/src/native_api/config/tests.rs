@@ -9,6 +9,7 @@ mod geodata_settings;
 mod groups;
 mod management;
 mod management_providers;
+mod remote_rules;
 mod secrets;
 mod source_authority;
 mod transactions;

@@ -106,13 +106,7 @@ impl Hop<'_> {
                 }
             }
         };
-        reply.map_err(|stage| match stage {
-            "asset_too_large" => anyhow::anyhow!("subscription body exceeds {max_bytes} bytes"),
-            "route_blocked" => {
-                anyhow::anyhow!("routing sends the subscription download to 'block'")
-            }
-            stage => anyhow::anyhow!("subscription download failed: {stage}"),
-        })
+        reply.map_err(|stage| super::failure::DownloadFailure::stage(stage).into())
     }
 }
 

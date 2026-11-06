@@ -14,6 +14,8 @@ use honk_config::subscription::Subscription;
 use honk_config::types::SubscriptionType;
 
 mod clash;
+mod compat;
+mod failure;
 mod json;
 #[cfg(feature = "native-api")]
 mod network;
@@ -28,6 +30,7 @@ pub use store::SubscriptionStore;
 pub(crate) use store::same_subscription_fetch_identity;
 pub(crate) use store::{LegacySubscriptionStore, legacy_store_roots, prune_bodies};
 
+pub(crate) use failure::FailureSummary;
 pub(crate) use route::failure_code;
 pub(crate) use supervisor::SubscriptionMergeReply;
 #[cfg(feature = "native-api")]
@@ -322,7 +325,7 @@ fn has_private_literal_host(url: &reqwest::Url) -> bool {
     }
 }
 
-fn subscription_redirect_error(
+pub(crate) fn subscription_redirect_error(
     previous: &reqwest::Url,
     next: &reqwest::Url,
 ) -> Option<&'static str> {
@@ -458,26 +461,27 @@ async fn fetch_following(
         {
             // The bound comes first, so a hop past it fails the same way
             // whatever its Location holds.
-            anyhow::ensure!(
-                redirects < MAX_SUBSCRIPTION_REDIRECTS,
-                "subscription redirected too many times"
-            );
+            if redirects >= MAX_SUBSCRIPTION_REDIRECTS {
+                return Err(failure::DownloadFailure::stage("too_many_redirects").into());
+            }
             let mut next = url.join(location.to_str()?)?;
             // Redirect userinfo must not restore credentials after an origin change.
             let _ = next.set_username("");
             let _ = next.set_password(None);
-            if let Some(reason) = subscription_redirect_error(&origin, &next) {
-                anyhow::bail!(reason);
+            if subscription_redirect_error(&origin, &next).is_some() {
+                return Err(failure::DownloadFailure::stage("redirect_rejected").into());
             }
             follow_subscription_redirect(&url, &next, &mut headers);
             url = next;
             continue;
         }
-        anyhow::ensure!(
-            !reply.status.is_client_error() && !reply.status.is_server_error(),
-            "subscription server answered HTTP {}",
-            reply.status
-        );
+        if reply.status.is_client_error() || reply.status.is_server_error() {
+            return Err(failure::DownloadFailure {
+                stage: "http_status_rejected",
+                http_status: Some(reply.status.as_u16()),
+            }
+            .into());
+        }
         let userinfo = reply
             .subscription_userinfo
             .as_ref()
@@ -805,6 +809,10 @@ fn parse_structured_subscription(
         }
         return Ok(false);
     };
+    if let Some(proxies) = compat::clash_list(&value) {
+        emit_clash_proxies(proxies, subscription_id, &mut *emit);
+        return Ok(true);
+    }
     if let serde_yaml::Value::Mapping(root) = &value
         && let Some(proxies) = yaml_value(root, "proxies").and_then(serde_yaml::Value::as_sequence)
     {
@@ -844,7 +852,7 @@ fn parse_uri_subscription(
             emit(outcome);
             continue;
         }
-        let result = Node::from_share_link_with_detailed_diagnostics_emit(uri, &mut |diagnostic| {
+        let result = compat::parse_share_link(uri, &mut |diagnostic| {
             emit(IndexedOutcome {
                 ordinal,
                 line: Some(ordinal),
@@ -950,7 +958,11 @@ fn emit_clash_proxies(
             Some(mapping) => IndexedOutcome::parsed(
                 ordinal,
                 "proxies",
-                clash::parse_clash_proxy(mapping, subscription_id, Some("h3")),
+                clash::parse_clash_proxy(
+                    &compat::clash_proxy(mapping),
+                    subscription_id,
+                    Some("h3"),
+                ),
             ),
         };
         emit(outcome);
@@ -966,6 +978,8 @@ fn parse_clash_subscription(
     let proxies = yaml
         .get("proxies")
         .and_then(serde_yaml::Value::as_sequence)
+        .map(Vec::as_slice)
+        .or_else(|| compat::clash_list(&yaml))
         .ok_or_else(|| anyhow::anyhow!("no 'proxies' array found in Clash YAML"))?;
     emit_clash_proxies(proxies, subscription_id, emit);
     Ok(())

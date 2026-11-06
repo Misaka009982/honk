@@ -33,6 +33,8 @@ pub(crate) struct ProviderLoad {
     pub(crate) error: Option<&'static str>,
     /// The configuration diagnostic code behind a `publication_rejected` error.
     pub(crate) rejection: Option<&'static str>,
+    /// 本次下载或解析失败的脱敏摘要，与发布拒绝原因分开保留。
+    pub(crate) failure: Option<super::FailureSummary>,
 }
 
 /// Why the supervisor refused an explicit provider refresh.
@@ -412,6 +414,15 @@ impl SupervisorState {
     }
 
     fn finish(&mut self, id: uuid::Uuid, result: Result<SubscriptionMergeReply, &'static str>) {
+        self.finish_with_failure(id, result, None);
+    }
+
+    fn finish_with_failure(
+        &mut self,
+        id: uuid::Uuid,
+        result: Result<SubscriptionMergeReply, &'static str>,
+        failure: Option<super::FailureSummary>,
+    ) {
         let Some(flight) = self.flights.remove(&id) else {
             return;
         };
@@ -452,6 +463,7 @@ impl SupervisorState {
                     matches!(reply.outcome, ReloadOutcome::CommittedDegraded { .. })
                         .then_some("publication_degraded");
                 observed.load.rejection = None;
+                observed.load.failure = None;
                 observed.load
             }
             (Err("supervisor_stopped"), Some(observed)) => observed.load,
@@ -464,6 +476,9 @@ impl SupervisorState {
                         .unwrap_or("publication_rejected"),
                 );
                 observed.load.rejection = result.as_ref().ok().and_then(|reply| reply.rejection);
+                observed.load.failure = (observed.load.error == Some("fetch_failed"))
+                    .then_some(failure)
+                    .flatten();
                 observed.load
             }
             (Ok(reply), None) if reply.outcome.accepted() => ProviderLoad {
@@ -473,6 +488,7 @@ impl SupervisorState {
                 error: matches!(reply.outcome, ReloadOutcome::CommittedDegraded { .. })
                     .then_some("publication_degraded"),
                 rejection: None,
+                failure: None,
             },
             _ => ProviderLoad::default(),
         };
@@ -537,7 +553,8 @@ impl SupervisorState {
                         "Subscription refresh retry failed; keeping active nodes"
                     );
                 }
-                self.finish(id, Err(super::failure_code(&error)));
+                let failure = super::FailureSummary::capture(&error, &completion.diagnostics);
+                self.finish_with_failure(id, Err(super::failure_code(&error)), Some(failure));
             }
             None => self.finish(id, Err("supervisor_stopped")),
         }

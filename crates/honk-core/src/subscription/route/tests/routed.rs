@@ -753,9 +753,12 @@ async fn a_sixth_redirect_fails_on_the_bound_before_its_location_is_checked() {
         .await
         .unwrap_err();
     for error in [routed, direct] {
-        assert!(
-            format!("{error:#}").contains("redirected too many times"),
-            "{error:#}"
+        assert_eq!(
+            error
+                .downcast_ref::<crate::subscription::failure::DownloadFailure>()
+                .unwrap()
+                .stage,
+            "too_many_redirects"
         );
     }
 }

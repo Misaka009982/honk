@@ -16,6 +16,7 @@ use crate::download_route::{self, Detour, Failed, Outbounds};
 use crate::marked_http::Deadline;
 use crate::routing::{GeoAssetSnapshot, GeoRequirements};
 
+pub(crate) mod bootstrap;
 mod sources;
 #[cfg(test)]
 mod tests;
@@ -613,7 +614,6 @@ async fn download(
 
 /// Fetches `url` straight from its host, resolved with the bootstrap
 /// resolver, over the bypass mark.
-#[cfg(test)]
 pub(crate) async fn download_direct(
     url: &str,
     bootstrap: &str,

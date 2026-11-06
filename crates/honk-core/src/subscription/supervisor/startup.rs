@@ -118,7 +118,10 @@ impl SupervisorState {
                                 }
                             }
                             Some(Err(error)) => {
-                                self.fail_startup_load(subscription.id, super::super::failure_code(&error));
+                                let code = super::super::failure_code(&error);
+                                self.fail_startup_load(subscription.id, code);
+                                self.observations.write().get_mut(&subscription.id).unwrap().load.failure =
+                                    (code == "fetch_failed").then(|| super::super::FailureSummary::capture(&error, &diagnostics));
                                 warn!(subscription = %subscription.name, %error, "Failed to fetch subscription");
                             }
                             None => {}
@@ -184,6 +187,7 @@ impl SupervisorState {
             );
             load.error = Some("publication_rejected");
             load.rejection = Some("duplicate-node-id");
+            load.failure = None;
             return None;
         }
         let count = nodes.len();
@@ -195,6 +199,7 @@ impl SupervisorState {
             cached,
             error: None,
             rejection: None,
+            failure: None,
         };
         Some(count)
     }
@@ -205,6 +210,7 @@ impl SupervisorState {
             let load = &mut observations.get_mut(&id).unwrap().load;
             load.error = Some(error);
             load.rejection = None;
+            load.failure = None;
         }
         if let Some(provider) = self.providers.get_mut(&id) {
             provider.finished(Instant::now(), Some(error));

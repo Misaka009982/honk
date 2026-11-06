@@ -21,15 +21,15 @@ const FIRST_BACKOFF: Duration = Duration::from_secs(3600);
 /// The shortest wait before an automatic check, so a startup never downloads
 /// at once, however long ago the last check was.
 const STARTUP_DELAY: Duration = Duration::from_secs(300);
-/// MetaCubeX full, raw first; jsDelivr serves the same bytes where GitHub is slow.
+/// 默认采用完整 Geosite 与精简 GeoIP；raw 优先，jsDelivr 作为同源回退。
 const DEFAULT_URLS: [[&str; 2]; 2] = [
     [
         "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geosite.dat",
         "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat",
     ],
     [
-        "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geoip.dat",
-        "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat",
+        "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/release/geoip-lite.dat",
+        "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip-lite.dat",
     ],
 ];
 
