@@ -9,17 +9,7 @@ cd "$work"
 create_set() {
   local prefix=$1
   mkdir dist
-  for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
-    for suffix in '' -stock; do
-      printf 'artifact\n' > "dist/honk-core-$prefix-$target$suffix-full.tar.gz"
-    done
-  done
-  for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-    for suffix in '' -stock; do
-      printf 'artifact\n' > "dist/honk-core-$prefix-$target$suffix-clash-api.tar.gz"
-      printf 'artifact\n' > "dist/honk-core-$prefix-$target$suffix-native-api.tar.gz"
-    done
-  done
+  printf 'artifact\n' > "dist/honk-core-$prefix-aarch64-unknown-linux-musl-full.tar.gz"
 }
 
 expect_rejection() {
@@ -32,18 +22,12 @@ expect_rejection() {
   fi
 }
 
-# Debug builds and formal tags share the sixteen-archive set; only the name prefix differs.
-for prefix in debug v0.1.0-rc.1; do
+# 分支、Debug 和正式标签均只要求 A53 对应的核心归档。
+for prefix in main debug v0.1.0-rc.1; do
   create_set "$prefix"
   bash "$ci_dir/check-release-artifacts.sh" "$prefix"
 
-  artifact=dist/honk-core-$prefix-aarch64-unknown-linux-musl-stock-native-api.tar.gz
-  mv "$artifact" saved.tar.gz
-  expect_rejection "$prefix"
-  mv saved.tar.gz "$artifact"
-  bash "$ci_dir/check-release-artifacts.sh" "$prefix"
-
-  artifact=dist/honk-core-$prefix-x86_64-unknown-linux-gnu-full.tar.gz
+  artifact=dist/honk-core-$prefix-aarch64-unknown-linux-musl-full.tar.gz
   mv "$artifact" saved.tar.gz
   expect_rejection "$prefix"
   mv saved.tar.gz "$artifact"

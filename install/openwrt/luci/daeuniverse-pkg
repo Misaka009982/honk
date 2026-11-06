@@ -1,0 +1,33 @@
+#!/bin/sh
+# 本分支由 GitHub Release 安装器升级；LuCI 只读取本机已装版本。
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+# jshn 用未设置变量表示空 JSON 状态，不能启用 nounset。
+set -e
+. /usr/share/libubox/jshn.sh
+
+[ "$#" -eq 2 ] && [ "$1" = installed ] || {
+	printf '%s\n' '请使用本仓库的一键安装脚本升级。' >&2
+	exit 1
+}
+case "$2" in dae|honk) app=$2 ;; *) exit 1 ;; esac
+set -- "$app" "luci-app-$app" luci-lib-daeuniverse luci-i18n-daeuniverse-zh-cn
+if command -v apk >/dev/null 2>&1; then
+	exec apk --interactive=no --progress=no query --network=no \
+		--installed --from installed --fields name,version --format json "$@"
+fi
+command -v opkg >/dev/null 2>&1 || exit 1
+printf '['
+separator=
+for package do
+	info=$(opkg status "$package")
+	version=$(printf '%s\n' "$info" | awk '$1 == "Version:" { version=$2 } $1 == "Status:" && $NF == "installed" { installed=1 } END { if (installed) print version }')
+	[ -n "$version" ] || continue
+	printf '%s' "$separator"
+	json_init
+	json_add_string name "$package"
+	json_add_string version "$version"
+	json_dump
+	separator=,
+done
+printf ']\n'

@@ -12,17 +12,5 @@ check() {
   fi
 }
 
-# Full: both APIs and the embedded UI, gnu and musl.
-for target in x86_64-unknown-linux-gnu x86_64-unknown-linux-musl aarch64-unknown-linux-gnu aarch64-unknown-linux-musl; do
-  for suffix in '' -stock; do
-    check "dist/honk-core-$prefix-$target$suffix-full.tar.gz"
-  done
-done
-
-# Lean variants ship for the static gateway targets only.
-for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-  for suffix in '' -stock; do
-    check "dist/honk-core-$prefix-$target$suffix-clash-api.tar.gz"
-    check "dist/honk-core-$prefix-$target$suffix-native-api.tar.gz"
-  done
-done
+# A53 使用完整 ARM64 musl 核心；不再要求其他架构或精简变体。
+check "dist/honk-core-$prefix-aarch64-unknown-linux-musl-full.tar.gz"

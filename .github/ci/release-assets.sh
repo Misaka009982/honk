@@ -12,6 +12,7 @@ for path in "$dist"/*.tar.gz; do
   case $file in
     honk-core-*) ;;
     doona-source-*) others+=("| \`$file\` | Corresponding source of both embedded doona UI editions (GPL-3.0 section 6) |"); continue ;;
+    honk-luci-source-*) others+=("| \`$file\` | LuCI 页面、中文翻译及本分支适配的配套源码 |"); continue ;;
     *) printf '::error::Unknown release archive: %s\n' "$file" >&2; exit 1 ;;
   esac
 
@@ -51,6 +52,10 @@ done
 for path in "$dist"/*.apk "$dist"/*.ipk; do
   [[ -e $path ]] || continue
   file=${path##*/}
+  if [[ $file =~ ^(luci-app-honk|luci-lib-daeuniverse|luci-i18n-daeuniverse-zh-cn)-.+-openwrt-25\.12-(all\.ipk|noarch\.apk)$ ]]; then
+    others+=("| \`$file\` | LuCI 组件 \`${BASH_REMATCH[1]}\`，架构无关安装包 |")
+    continue
+  fi
   if [[ ! $file =~ ^honk-.+-openwrt-25\.12-(x86_64|aarch64_generic|aarch64_cortex-a53|aarch64_cortex-a72|aarch64_cortex-a76)\.(apk|ipk)$ ]]; then
     printf '::error::无法识别 OpenWrt 安装包名称：%s\n' "$file" >&2
     exit 1

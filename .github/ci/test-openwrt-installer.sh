@@ -38,6 +38,7 @@ HONK_INSTALLER_LIBRARY=1 source "$ci_dir/../../scripts/install.sh"
 repo=example/honk
 arch=x86_64
 ext=apk
+HONK_LUCI=0
 unset HONK_VERSION
 
 cat > "$fixtures/releases.json" <<'JSON'
@@ -70,6 +71,54 @@ fi
 arch=x86_64
 ext=ipk
 [[ $(package_name debug.2026.1) == honk-debug-openwrt-25.12-x86_64.ipk ]]
+
+# A53 核心必须搭配 all 架构的三份 LuCI IPK，缺一份就拒绝整套安装。
+arch=aarch64_cortex-a53
+HONK_LUCI=1
+tag=debug.build.42221567511
+package=$(package_name "$tag")
+cat > "$fixtures/bundle.json" <<'JSON'
+{"assets":[
+  {"name":"honk-debug-openwrt-25.12-aarch64_cortex-a53.ipk"},
+  {"name":"luci-lib-daeuniverse-debug-openwrt-25.12-all.ipk"},
+  {"name":"luci-app-honk-debug-openwrt-25.12-all.ipk"},
+  {"name":"luci-i18n-daeuniverse-zh-cn-debug-openwrt-25.12-all.ipk"},
+  {"name":"SHA256SUMS"}
+]}
+JSON
+has_assets "$fixtures/bundle.json" '@' "$package"
+for component in luci-lib-daeuniverse luci-app-honk luci-i18n-daeuniverse-zh-cn; do
+  python3 - "$fixtures/bundle.json" "$fixtures/incomplete.json" "$component" <<'PY'
+import json
+import sys
+with open(sys.argv[1], encoding="utf-8") as stream:
+    data = json.load(stream)
+data["assets"] = [asset for asset in data["assets"] if not asset["name"].startswith(sys.argv[3] + "-")]
+with open(sys.argv[2], "w", encoding="utf-8") as stream:
+    json.dump(data, stream)
+PY
+  if has_assets "$fixtures/incomplete.json" '@' "$package"; then
+    echo "缺少 $component 时必须拒绝整套安装" >&2
+    exit 1
+  fi
+done
+HONK_LUCI=0
+has_assets "$fixtures/incomplete.json" '@' "$package"
+ext=apk
+[[ $(luci_package_names "$tag") == $'luci-lib-daeuniverse-debug-openwrt-25.12-noarch.apk\nluci-app-honk-debug-openwrt-25.12-noarch.apk\nluci-i18n-daeuniverse-zh-cn-debug-openwrt-25.12-noarch.apk' ]]
+ext=ipk
+
+# 包名和架构从实际 control 文件读取；all 仅适用于 LuCI，不能冒充 A53 核心。
+mkdir "$work/control-fixture"
+printf 'Package: luci-app-honk\nVersion: 2026.11.6-1\nArchitecture: all\n' > "$work/control-fixture/control"
+tar -czf "$work/control.tar.gz" -C "$work/control-fixture" ./control
+tar -czf "$work/luci.ipk" -C "$work" ./control.tar.gz
+pm=opkg
+read_metadata "$work/luci.ipk" luci-app-honk all
+if (trap - EXIT; read_metadata "$work/luci.ipk" honk "$arch"); then
+  echo 'LuCI 包不能代替核心' >&2
+  exit 1
+fi
 
 printf 'package-content\n' > "$work/package.ipk"
 hash=$(sha256sum "$work/package.ipk")

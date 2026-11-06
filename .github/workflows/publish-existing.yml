@@ -1,0 +1,138 @@
+name: Publish existing build
+run-name: 发布已有构建 ${{ inputs.run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: '成功的 main Release 运行编号（例如 42221567511），复用核心、补齐 LuCI'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-existing-${{ inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: 发布已有 main 构建
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 核对来源构建及完整产物
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SOURCE_RUN_ID: ${{ inputs.run_id }}
+        with:
+          script: |
+            const input = process.env.SOURCE_RUN_ID;
+            if (!/^[1-9][0-9]*$/.test(input) || !Number.isSafeInteger(Number(input))) {
+              throw new Error('run_id 必须是 Actions 运行链接末尾的正整数编号');
+            }
+            const { selectBuild } = require('./.github/ci/release-existing.cjs');
+            const request = { ...context.repo, run_id: Number(input) };
+            const { data: run } = await github.rest.actions.getWorkflowRun(request);
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              ...request, per_page: 100,
+            });
+            const selected = selectBuild(run, artifacts, `${context.repo.owner}/${context.repo.repo}`);
+            try {
+              const { data: ref } = await github.rest.git.getRef({
+                ...context.repo, ref: `tags/${selected.tag}`,
+              });
+              if (ref.object.type !== 'commit' || ref.object.sha !== selected.sha) {
+                throw new Error('已有发布标签指向其他提交，拒绝覆盖');
+              }
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            core.setOutput('run_id', selected.runId);
+            core.setOutput('sha', selected.sha);
+            core.setOutput('tag', selected.tag);
+            core.setOutput('artifact_ids', selected.artifactIds);
+            core.info(`复用构建 ${selected.runId}，来源提交 ${selected.sha}，发布标签 ${selected.tag}`);
+      - name: 下载已核对的构建产物
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          artifact-ids: ${{ steps.source.outputs.artifact_ids }}
+          path: dist
+          merge-multiple: true
+      - name: 读取原构建提交的源码和 UI 版本
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          path: build-source
+          persist-credentials: false
+      - name: 核对安装包并准备发布附件
+        run: |
+          set -euo pipefail
+          bash .github/ci/check-release-artifacts.sh main
+          bash .github/ci/prepare-existing-release.sh dist publish-dist
+          if [[ ! -f publish-dist/honk-luci-source-debug.tar.gz ]]; then
+            sudo apt-get update
+            sudo apt-get install -y fakeroot zstd
+            bash .github/ci/prepare-openwrt-sdk.sh "$RUNNER_TEMP/openwrt-sdk"
+            bash .github/ci/build-openwrt-luci.sh publish-dist debug "$RUNNER_TEMP/openwrt-sdk"
+          fi
+          bash .github/ci/check-openwrt-luci.sh publish-dist debug
+          bash build-source/ci/fetch-doona.sh --source publish-dist
+          (cd publish-dist && sha256sum -- *.tar.gz *.apk *.ipk > SHA256SUMS)
+      - name: 生成发布说明
+        env:
+          SOURCE_RUN_ID: ${{ steps.source.outputs.run_id }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          RELEASE_TAG: ${{ steps.source.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cat > notes.md <<EOF
+          本预发布复用已成功的 main 构建，保留原核心二进制和包内版本，不重新编译核心。
+
+          - 原构建：$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID
+          - 来源提交：\`$SOURCE_SHA\`
+          - 发布标签：\`$RELEASE_TAG\`
+          - A53 OPKG 安装包：\`honk-debug-openwrt-25.12-aarch64_cortex-a53.ipk\`
+          - LuCI IPK：\`luci-lib-daeuniverse-debug-openwrt-25.12-all.ipk\`、\`luci-app-honk-debug-openwrt-25.12-all.ipk\`、\`luci-i18n-daeuniverse-zh-cn-debug-openwrt-25.12-all.ipk\`
+          - 一键安装：下载本仓库 \`scripts/install.sh\` 后执行 \`HONK_VERSION=$RELEASE_TAG sh /tmp/honk-install.sh\`。
+
+          核心归档保留 main 文件名和内部目录；OpenWrt 核心附件复制为 debug 文件名，内容不变。
+          LuCI 管理页、共享库及中文包随附；旧构建缺少 LuCI 时，以本次发布提交的固定源码单独打包。
+          核心来源提交见上方；发布脚本提交：\`$GITHUB_SHA\`，LuCI 的确切来源与适配提交见 honk-luci-source-debug.tar.gz 中的 REVISIONS。
+          使用 SHA256SUMS 校验附件；本入口记录原构建来源，不生成替代原构建的证明。
+          EOF
+      - name: 发布独立 Debug 预发布
+        id: release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: ${{ steps.source.outputs.tag }}
+          name: ${{ steps.source.outputs.tag }}
+          target_commitish: ${{ steps.source.outputs.sha }}
+          prerelease: true
+          make_latest: "false"
+          files: |
+            publish-dist/*.tar.gz
+            publish-dist/*.apk
+            publish-dist/*.ipk
+            publish-dist/SHA256SUMS
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          body_path: notes.md
+      - name: 写入发布入口
+        env:
+          RELEASE_URL: ${{ steps.release.outputs.url }}
+          RELEASE_TAG: ${{ steps.source.outputs.tag }}
+        run: |
+          printf '已发布：%s\n\n安装时指定：`HONK_VERSION=%s`\n' "$RELEASE_URL" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"

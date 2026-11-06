@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 官方 25.12 的 64 位架构标签；ARM64 共用基线 ARMv8 musl 二进制。
-OPENWRT_ARCHES=(x86_64 aarch64_generic aarch64_cortex-a53 aarch64_cortex-a72 aarch64_cortex-a76)
+# 稳定前只发布 A53；其他架构映射保留供后续扩展使用。
+OPENWRT_ARCHES=(aarch64_cortex-a53)
 
 openwrt_binary_arch() {
   case "$1" in

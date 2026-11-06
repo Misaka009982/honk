@@ -23,15 +23,17 @@ honk 的 eBPF 数据面和配置语法参考 dae 的设计，出站组与 Clash 
 - **Sub-Store 兼容**：支持 URI/Base64、Clash/Mihomo 和裸节点数组；AnyTLS 的密码、SNI、ALPN、证书校验及 UDP 参数进入原生拨号模型，同时提供脱敏失败原因。
 - **远程 `.dae` 规则**：HTTP(S) `include`、有效缓存和自动热重载。`assets.rules.interval` 默认 `24h`，`0` 关闭定时刷新；失败保留当前规则。
 - **Geo 首次下载**：按需下载 **GeoIP lite** 与完整 **Geosite**，本地仍保存为 `geoip.dat` / `geosite.dat`；自定义来源优先。
-- **OpenWrt 25.12**：构建 APK v3 与 OPKG/IPK，包含 procd 服务和配置保留，不依赖 `v2ray-*` 数据包；提供一键安装脚本。
+- **OpenWrt 25.12**：当前只构建 `aarch64_cortex-a53` 的完整核心 APK/IPK，另附 LuCI 管理页、共享库和简体中文包；保留 procd 服务和用户配置，不依赖 `v2ray-*` 数据包。
 
 模块接入位置与限制见[修改说明](doc/zh/operations/modular-additions.md)。本地仅完成静态核查，编译、回归测试和设备联网验收待 Linux/OpenWrt 环境执行。
 
 **构建由维护者手动触发。** `CI`、`Release`、`Docker`、`Weekly` 和 `Reload benchmark` 仅保留 `workflow_dispatch`，提交代码、创建 PR、推送标签、发布 Release 或到达定时时间均不会自动启动构建。在 [Actions → Release](https://github.com/Misaka009982/honk/actions/workflows/release.yml) 点击 **Run workflow**、选择 `main`，即可构建并下载包含 APK/IPK 的 artifacts；手动运行 `CI` 可执行格式检查和测试。
 
+**把已有构建发布到 Releases：** 在 [Actions → Publish existing build](https://github.com/Misaka009982/honk/actions/workflows/publish-existing.yml) 选择 `main`，填写成功的 Release 运行编号 `run_id`。该入口复用未过期核心产物，发布为 `debug.build.<run_id>`；旧构建缺少 LuCI 时会单独补建页面与翻译包，不重新编译核心。安装时指定 `HONK_VERSION=debug.build.<run_id>`。选择 `main` 运行 Release 本身只生成 artifacts，不会发布。
+
 ## OpenWrt 一键安装
 
-适用 OpenWrt / ImmortalWrt **25.12、Linux 6.12+**，支持 x86_64 与文档列出的 ARM64 架构。在路由器上以 root 执行，先完整下载脚本，下载成功后安装：
+适用 OpenWrt / ImmortalWrt **25.12、Linux 6.12+**；当前只发布 **`aarch64_cortex-a53`**，稳定后再扩展其他架构。在路由器上以 root 执行，先完整下载脚本，下载成功后安装：
 
 ```sh
 curl -fL https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/install.sh -o /tmp/honk-install.sh && sh /tmp/honk-install.sh
@@ -43,9 +45,9 @@ curl -fL https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/instal
 wget -O /tmp/honk-install.sh https://raw.githubusercontent.com/Misaka009982/honk/main/scripts/install.sh && sh /tmp/honk-install.sh
 ```
 
-脚本自动识别 APK/OPKG 和包架构，优先选择带匹配安装包的正式版本，无正式版本时选择 beta/rc 等预发布，核对 SHA-256 后安装；Debug 需显式指定 `HONK_VERSION=debug`。可以执行 `HONK_VERSION=v0.1.0-beta.5 sh /tmp/honk-install.sh` 指定已经发布的版本。首次安装不启动服务；配置 `/etc/honk/config.dae` 后执行 `/etc/init.d/honk enable` 与 `/etc/init.d/honk start`。升级由包管理器保留配置，已启用服务会重启。
+脚本默认安装核心及三个 LuCI 组件，进入“服务 → honk”管理；`HONK_LUCI=0` 可只安装核心。自动识别 APK/OPKG 和包架构，优先选择带完整安装包的正式版本，无正式版本时选择 beta/rc 等预发布，核对 SHA-256 后安装；Debug 需显式指定 `HONK_VERSION=debug` 或 `HONK_VERSION=debug.build.<run_id>`。首次安装不启动服务；配置 `/etc/honk/config.dae` 后执行 `/etc/init.d/honk enable` 与 `/etc/init.d/honk start`，也可通过 LuCI 操作。升级保留配置，已启用服务会重启。
 
-上面的 `main` 地址和 Release 安装包需在本分支合并并发布后可用；只有源码尚未发布安装包时，脚本会明确退出。脚本参考 [kenzok8/openwrt-honk](https://github.com/kenzok8/openwrt-honk/blob/main/scripts/install.sh) 的安装流程。更多参数、手动安装和构建说明见 [OpenWrt 安装文档](doc/zh/operations/openwrt-packages.md)。
+安装包需先在本仓库发布；只有源码或 Actions artifacts 时，脚本会明确退出。脚本参考 [kenzok8/openwrt-honk](https://github.com/kenzok8/openwrt-honk/blob/main/scripts/install.sh) 的安装流程。更多参数、手动安装和构建说明见 [OpenWrt 安装文档](doc/zh/operations/openwrt-packages.md)。
 
 ## 功能概览
 
@@ -59,7 +61,7 @@ wget -O /tmp/honk-install.sh https://raw.githubusercontent.com/Misaka009982/honk
 
 ## 安装
 
-从 [Releases](https://github.com/Misaka009982/honk/releases) 下载适合目标平台的归档。发布物支持 x86_64 与 aarch64 Linux，一般用途建议选择 `full`。
+当前本分支只发布 A53 使用的 ARM64 musl `full` 核心和 OpenWrt/LuCI 安装包，从 [Releases](https://github.com/Misaka009982/honk/releases) 下载。下表保留上游各变体的能力说明；其他架构、gnu、stock、精简 API 和 DEB/RPM/Arch 产物暂不构建。
 
 | 构建 | 原生 API | Clash API | 内嵌 doona 与 doona lite |
 | --- | --- | --- | --- |
@@ -67,7 +69,7 @@ wget -O /tmp/honk-install.sh https://raw.githubusercontent.com/Misaka009982/honk
 | `native-api` | 是 | 否 | 否 |
 | `clash-api` | 否 | 是 | 否 |
 
-各构建均提供静态链接的 musl 版本，`full` 另提供链接 glibc 的 `gnu` 版本。名称含 `stock` 的归档使用系统分配器而非 jemalloc。每个版本的 Downloads 一节列出校验和及构建来源证明。
+当前归档使用静态 musl 和 jemalloc，包含全部 API 与两套内嵌 UI。标签发布附带校验和及构建来源证明；复用已有构建的发布入口附带校验和与原构建链接。
 
 Debian、Ubuntu、Fedora、openSUSE 和 Arch Linux 的软件包安装见[安装指南](https://daeuniverse.org/zh-CN/honk/installation/)。本分支的 OpenWrt APK/IPK 与一键安装见[安装文档](doc/zh/operations/openwrt-packages.md)。
 

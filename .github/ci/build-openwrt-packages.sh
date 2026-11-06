@@ -27,7 +27,11 @@ trap 'rm -rf "$work"' EXIT
 
 # 运行时需要内核功能和 CA 根；完整静态二进制不依赖系统 C++ 或 Geo 包。
 depends='ca-bundle kmod-veth kmod-sched-core kmod-sched-bpf kmod-nft-core kmod-nft-queue kmod-nfnetlink-queue kmod-nf-conntrack'
-for arch in x86_64 aarch64; do
+declare -A binary_arches=()
+for package_arch in "${OPENWRT_ARCHES[@]}"; do
+  binary_arches[$(openwrt_binary_arch "$package_arch")]=1
+done
+for arch in "${!binary_arches[@]}"; do
   name="honk-core-$prefix-$arch-unknown-linux-musl-full"
   tar -xzf "$dist/$name.tar.gz" -C "$work"
   binary="$work/$name/honk-core"

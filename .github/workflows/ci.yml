@@ -48,6 +48,8 @@ jobs:
           for t in artifacts prune assets version notes; do bash .github/ci/test-release-$t.sh; done
           bash .github/ci/test-openwrt-packages.sh
           bash .github/ci/test-openwrt-installer.sh
+          node --test .github/ci/test-release-existing.cjs
+          bash .github/ci/test-prepare-existing-release.sh
       - name: Check PR changelog fragments
         if: github.event_name == 'pull_request'
         env:

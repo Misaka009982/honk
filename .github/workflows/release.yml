@@ -25,6 +25,8 @@ jobs:
           bash .github/ci/test-release-artifacts.sh
           bash .github/ci/test-openwrt-packages.sh
           bash .github/ci/test-openwrt-installer.sh
+          node --test .github/ci/test-release-existing.cjs
+          bash .github/ci/test-prepare-existing-release.sh
       - name: Test Debug release pruning
         run: bash .github/ci/test-release-prune.sh
       - name: Test release asset table
@@ -94,27 +96,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Full: Clash API + native API + embedded doona UI. Both arches ship
-          # two binaries: jemalloc (default, faster QUIC) and stock malloc
-          # (lower RSS high-water on small gateways).
-          - {target: x86_64-unknown-linux-gnu, suffix: "", variant: full, name_suffix: "-full"}
-          - {target: x86_64-unknown-linux-gnu, suffix: "-stock", variant: full, name_suffix: "-full"}
-          - {target: x86_64-unknown-linux-musl, suffix: "", variant: full, name_suffix: "-full"}
-          - {target: x86_64-unknown-linux-musl, suffix: "-stock", variant: full, name_suffix: "-full"}
-          - {target: aarch64-unknown-linux-gnu, suffix: "", variant: full, name_suffix: "-full"}
-          - {target: aarch64-unknown-linux-gnu, suffix: "-stock", variant: full, name_suffix: "-full"}
+          # 稳定前只构建 A53 所需的 ARM64 musl 完整核心。
           - {target: aarch64-unknown-linux-musl, suffix: "", variant: full, name_suffix: "-full"}
-          - {target: aarch64-unknown-linux-musl, suffix: "-stock", variant: full, name_suffix: "-full"}
-          # Lean variants apply to the static gateway builds only; the gnu
-          # artifacts stay full. Every name carries its variant suffix.
-          - {target: x86_64-unknown-linux-musl, suffix: "", variant: clash-api, name_suffix: "-clash-api"}
-          - {target: x86_64-unknown-linux-musl, suffix: "-stock", variant: clash-api, name_suffix: "-clash-api"}
-          - {target: aarch64-unknown-linux-musl, suffix: "", variant: clash-api, name_suffix: "-clash-api"}
-          - {target: aarch64-unknown-linux-musl, suffix: "-stock", variant: clash-api, name_suffix: "-clash-api"}
-          - {target: x86_64-unknown-linux-musl, suffix: "", variant: native-api, name_suffix: "-native-api"}
-          - {target: x86_64-unknown-linux-musl, suffix: "-stock", variant: native-api, name_suffix: "-native-api"}
-          - {target: aarch64-unknown-linux-musl, suffix: "", variant: native-api, name_suffix: "-native-api"}
-          - {target: aarch64-unknown-linux-musl, suffix: "-stock", variant: native-api, name_suffix: "-native-api"}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -296,7 +279,7 @@ jobs:
           retention-days: 1
 
   openwrt:
-    name: OpenWrt 25.12 APK / IPK
+    name: OpenWrt 25.12 A53 APK / IPK + LuCI
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -304,7 +287,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: honk-core-*-unknown-linux-musl-full
+          name: honk-core-aarch64-unknown-linux-musl-full
           path: dist
           merge-multiple: true
       - name: Prepare OpenWrt packaging tools
@@ -312,14 +295,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y fakeroot zstd
-          source install/openwrt/sdk.sh
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/openwrt-sdk.tar.zst" "$OPENWRT_SDK_URL"
-          echo "$OPENWRT_SDK_SHA256  $RUNNER_TEMP/openwrt-sdk.tar.zst" | sha256sum -c -
-          sdk_name=${OPENWRT_SDK_URL##*/}
-          sdk_name=${sdk_name%.tar.zst}
-          mkdir -p "$RUNNER_TEMP/openwrt-sdk"
-          tar --zstd -xf "$RUNNER_TEMP/openwrt-sdk.tar.zst" --strip-components=1 \
-            -C "$RUNNER_TEMP/openwrt-sdk" "$sdk_name/staging_dir/host"
+          bash .github/ci/prepare-openwrt-sdk.sh "$RUNNER_TEMP/openwrt-sdk"
       - name: Package OpenWrt APK v3 and IPK
         run: |
           set -euo pipefail
@@ -336,7 +312,8 @@ jobs:
           fi
           bash .github/ci/build-openwrt-packages.sh dist "$prefix" "$version" "$RUNNER_TEMP/openwrt-sdk"
           bash .github/ci/check-openwrt-packages.sh dist "$prefix"
-          (cd dist && sha256sum -- *.apk *.ipk > OPENWRT-SHA256SUMS)
+          bash .github/ci/build-openwrt-luci.sh dist "$prefix" "$RUNNER_TEMP/openwrt-sdk"
+          (cd dist && sha256sum -- *.apk *.ipk honk-luci-source-*.tar.gz > OPENWRT-SHA256SUMS)
       - name: Upload OpenWrt packages
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -344,6 +321,7 @@ jobs:
           path: |
             dist/*.apk
             dist/*.ipk
+            dist/honk-luci-source-*.tar.gz
             dist/OPENWRT-SHA256SUMS
           if-no-files-found: error
           retention-days: 1
@@ -384,23 +362,11 @@ jobs:
           fi
           bash release-source/.github/ci/check-release-artifacts.sh "$prefix"
           bash release-source/.github/ci/check-openwrt-packages.sh dist "$prefix"
+          bash release-source/.github/ci/check-openwrt-luci.sh dist "$prefix"
 
       # GPL-3.0 section 6: both embedded editions share this corresponding source.
       - name: Add doona corresponding source
         run: bash release-source/ci/fetch-doona.sh --source dist
-
-      # Formal releases also package the static musl full builds for dpkg, rpm and pacman.
-      - name: Build Linux packages
-        if: startsWith(github.ref, 'refs/tags/v')
-        working-directory: release-source
-        run: |
-          set -euo pipefail
-          source .github/ci/pins.env
-          curl -fsSL --retry 3 -o "$RUNNER_TEMP/nfpm.tar.gz" \
-            "https://github.com/goreleaser/nfpm/releases/download/v$NFPM_VERSION/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
-          echo "$NFPM_SHA256  $RUNNER_TEMP/nfpm.tar.gz" | sha256sum -c -
-          tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP" nfpm
-          PATH="$RUNNER_TEMP:$PATH" bash .github/ci/build-packages.sh ../dist "$GITHUB_REF_NAME"
 
       # One checksum file covers every published archive, formal and Debug alike; the
       # attestation lets `gh attestation verify` tie each archive to this workflow run.
@@ -408,7 +374,7 @@ jobs:
         working-directory: dist
         run: |
           shopt -s nullglob
-          sha256sum -- *.tar.gz *.deb *.rpm *.pkg.tar.zst *.apk *.ipk > SHA256SUMS
+          sha256sum -- *.tar.gz *.apk *.ipk > SHA256SUMS
 
       # Every release body explains each archive as {allocator}-{API}-{arch}-{libc}.
       - name: Write release notes
@@ -438,9 +404,6 @@ jobs:
         with:
           files: |
             dist/*.tar.gz
-            dist/*.deb
-            dist/*.rpm
-            dist/*.pkg.tar.zst
             dist/*.apk
             dist/*.ipk
             dist/SHA256SUMS

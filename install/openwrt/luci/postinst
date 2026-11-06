@@ -1,0 +1,12 @@
+#!/bin/sh
+[ -z "${IPKG_INSTROOT:-}" ] || exit 0
+[ "${IPKG_NO_SCRIPT:-0}" != 1 ] || exit 0
+
+# 与 LuCI 的安装行为一致，让菜单和 RPC 权限在安装后重新载入。
+rm -f /tmp/luci-indexcache.*
+rm -rf /tmp/luci-modulecache/
+if [ -f /usr/lib/lua/luci/i18n/daeuniverse.zh-cn.lmo ]; then
+	uci set 'luci.languages.zh_cn=简体中文 (Simplified Chinese)'
+	uci commit luci
+fi
+/etc/init.d/rpcd reload
