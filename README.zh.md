@@ -27,6 +27,8 @@ honk 的 eBPF 数据面和配置语法参考 dae 的设计，出站组与 Clash 
 
 模块接入位置与限制见[修改说明](doc/zh/operations/modular-additions.md)。本地仅完成静态核查，编译、回归测试和设备联网验收待 Linux/OpenWrt 环境执行。
 
+**构建由维护者手动触发。** `CI`、`Release`、`Docker`、`Weekly` 和 `Reload benchmark` 仅保留 `workflow_dispatch`，提交代码、创建 PR、推送标签、发布 Release 或到达定时时间均不会自动启动构建。在 [Actions → Release](https://github.com/Misaka009982/honk/actions/workflows/release.yml) 点击 **Run workflow**、选择 `main`，即可构建并下载包含 APK/IPK 的 artifacts；手动运行 `CI` 可执行格式检查和测试。
+
 ## OpenWrt 一键安装
 
 适用 OpenWrt / ImmortalWrt **25.12、Linux 6.12+**，支持 x86_64 与文档列出的 ARM64 架构。在路由器上以 root 执行，先完整下载脚本，下载成功后安装：

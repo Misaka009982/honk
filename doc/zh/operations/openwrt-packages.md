@@ -83,6 +83,10 @@ logread -e honk
 
 ## 构建与同步上游
 
+构建工作流仅接受 `workflow_dispatch` 手动触发，push、PR、标签、Release 发布和定时任务均不会自动启动构建。进入 [Actions → Release](https://github.com/Misaka009982/honk/actions/workflows/release.yml)，点击 **Run workflow** 并选择 `main`；完成后在该次运行的 artifacts 下载 `openwrt-25.12-packages`。`CI`、`Docker`、`Weekly` 与 `Reload benchmark` 同样由维护者在 Actions 中手动选择运行。
+
+需要为已有标签构建发布物时，由维护者手动指定该标签，例如 `gh workflow run release.yml --ref <tag> --repo Misaka009982/honk`。正式 `v*` 标签仍执行版本与变更记录检查并创建草稿，`debug.*` 标签仍更新 Debug 发布；分支上的手动构建只提供 artifacts。
+
 `release.yml` 的独立 `openwrt` job 在原有二进制构建后运行，正式、Debug、手动构建均生成五种架构标签的两种格式，共十个包。手动构建从 Actions 的 `openwrt-25.12-packages` artifact 下载，并使用其中的 `OPENWRT-SHA256SUMS` 校验；正式及 Debug 发布将包加入附件、`SHA256SUMS` 和构建来源证明。手动与 Debug 包的版本使用工作区版本加 `_alpha<run_number>` / `~alpha.<run_number>`，避免把开发包伪装为正式版本。
 
 打包模块为 [build-openwrt-packages.sh](../../../.github/ci/build-openwrt-packages.sh) 和 [install/openwrt](../../../install/openwrt/targets.sh)。APK 使用 SHA-256 固定的官方 OpenWrt 25.12.0 SDK 主机打包器；只提取主机工具，不重新编译 honk。IPK 采用 OPKG 的 control/data gzip-tar 格式；两个格式共用服务、配置和依赖。没有借用 nfpm 的 Alpine APK 输出。

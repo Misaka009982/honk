@@ -45,7 +45,7 @@ Maintaining this guide: a rule that binds every change goes in this file; a subs
 ├── example.dae               # Annotated example (Chinese comments)
 ├── doc/                      # en/ + zh/ doc trees: guide, design/, reference/, operations/; migration/{en,zh}/<tag>.md
 ├── ci/                       # zigcc/zigcxx: zig cc/c++ wrappers for cross builds (strip CMake's clang-style --target from boring-sys ASM rules + rustc's aarch64 errata linker args; used by build-musl and the release workflow); zig-bindgen-env: derive BINDGEN_EXTRA_CLANG_ARGS from `zig cc -E -v` for cross bindgen
-├── .github/workflows/        # release.yml: tag-triggered test + cross-build + GitHub Release
+├── .github/workflows/        # 手动触发检查、交叉构建与 GitHub Release
 └── crates/
     ├── honk-config           # Config schema + dae-syntax parser + share links (workspace member)
     ├── honk-ebpf-common      # no_std shared eBPF/userspace types (workspace member)
@@ -59,6 +59,8 @@ Maintaining this guide: a rule that binds every change goes in this file; a subs
 Notable absences (referenced by older docs but **not in this tree**): `Makefile`, `plan.md`, `run_tests.sh`, `test-honk.sh`, `log/`, and the vendored reference checkouts (`honk/`, `outbound/`, `sing-box/` — these paths are `.gitignore`d). The old `run` / `deploy` / `docker*` recipes were removed with those missing files; use `run-debug`, `run-dae`, and `deploy-vyos`. `test-routing` and its dependent `test-netns` share one complete disposable-VM gate; prepare its toolchain, objects and environment through `honk-real-ebpf-tests` rather than attaching root-cgroup hooks on a shared host.
 
 ## Technology stack
+
+本分支的 `CI`、`Release`、`Docker`、`Weekly` 和 `Reload benchmark` 仅保留 `workflow_dispatch`，由维护者手动触发；push、PR、标签、Release 发布和定时任务均不启动构建。
 
 本分支新增 `scripts/install.sh`（OpenWrt 25.12 一键安装）和 `install/openwrt/`（APK v3/IPK 打包资源）；既有缺失的部署脚本不因此恢复。分支特有模块说明见 [modular-additions.md](doc/zh/operations/modular-additions.md)。
 
@@ -168,7 +170,7 @@ The root `rust-toolchain.toml` pins the host compiler; `crates/honk-ebpf/rust-to
 
 Removed `run` / `deploy` / `docker*` recipes called absent `scripts/debug-local.sh` / `scripts/deploy-gateway.sh` / `Dockerfile` / `docker-compose.yml` (Repository layout).
 
-`outbound-ci` runs all-target Clippy and crate test suites in separate `rprx`-off and `rprx`-on invocations; the config suite runs once. The weekly/manual `public-vless-loopback` lane separately runs the two public ignored `vless_udp` official-peer cases, the ignored official Vision uplink Direct case and the ignored shared-source sing-box matrix with pinned executables, not the legacy external-mask test.
+`outbound-ci` runs all-target Clippy and crate test suites in separate `rprx`-off and `rprx`-on invocations; the config suite runs once. The manual `public-vless-loopback` lane separately runs the two public ignored `vless_udp` official-peer cases, the ignored official Vision uplink Direct case and the ignored shared-source sing-box matrix with pinned executables, not the legacy external-mask test.
 
 ## Current validation guidance
 
