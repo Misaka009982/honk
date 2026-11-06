@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: '成功的 main Release 运行编号（例如 42221567511），复用核心、补齐 LuCI'
+        description: '成功的 main Release 运行编号；先创建指向原提交的 debug.build.<run_id> 标签'
         required: true
         type: string
 
@@ -41,23 +41,14 @@ jobs:
             if (!/^[1-9][0-9]*$/.test(input) || !Number.isSafeInteger(Number(input))) {
               throw new Error('run_id 必须是 Actions 运行链接末尾的正整数编号');
             }
-            const { selectBuild } = require('./.github/ci/release-existing.cjs');
+            const { selectBuild, verifyReleaseTag } = require('./.github/ci/release-existing.cjs');
             const request = { ...context.repo, run_id: Number(input) };
             const { data: run } = await github.rest.actions.getWorkflowRun(request);
             const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
               ...request, per_page: 100,
             });
             const selected = selectBuild(run, artifacts, `${context.repo.owner}/${context.repo.repo}`);
-            try {
-              const { data: ref } = await github.rest.git.getRef({
-                ...context.repo, ref: `tags/${selected.tag}`,
-              });
-              if (ref.object.type !== 'commit' || ref.object.sha !== selected.sha) {
-                throw new Error('已有发布标签指向其他提交，拒绝覆盖');
-              }
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
+            await verifyReleaseTag(github, context.repo, selected);
             core.setOutput('run_id', selected.runId);
             core.setOutput('sha', selected.sha);
             core.setOutput('tag', selected.tag);
@@ -113,6 +104,30 @@ jobs:
           核心来源提交见上方；发布脚本提交：\`$GITHUB_SHA\`，LuCI 的确切来源与适配提交见 honk-luci-source-debug.tar.gz 中的 REVISIONS。
           使用 SHA256SUMS 校验附件；本入口记录原构建来源，不生成替代原构建的证明。
           EOF
+      - name: 保存完整安装包与校验和
+        id: packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openwrt-release-${{ steps.source.outputs.run_id }}-${{ github.run_attempt }}
+          path: publish-dist/
+          if-no-files-found: error
+          retention-days: 7
+      - name: 写入安装包下载入口
+        env:
+          ARTIFACT_URL: ${{ steps.packages.outputs.artifact-url }}
+        run: |
+          printf '完整安装包、配套源码及 SHA256SUMS 已保存：[下载 artifact](%s)，保留 7 天。后续发布失败时仍可下载并手动安装。\n\n' "$ARTIFACT_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: 发布前复核标签
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          RELEASE_TAG: ${{ steps.source.outputs.tag }}
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          script: |
+            const { verifyReleaseTag } = require('./.github/ci/release-existing.cjs');
+            await verifyReleaseTag(github, context.repo, {
+              tag: process.env.RELEASE_TAG, sha: process.env.SOURCE_SHA,
+            });
       - name: 发布独立 Debug 预发布
         id: release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3

@@ -93,7 +93,27 @@ logread -e honk
 
 `CI` 的 `changes` 任务和 Release 的脚本预检使用临时 `v1.2.3` 文件模拟缺包、空包，日志中的“测试夹具，预期拒绝”表示自测场景。实际安装包由 Release 的 `OpenWrt 25.12 A53 APK / IPK + LuCI` 任务生成并上传；选择 `main` 构建时，A53 的 OPKG 包位于上述 artifact 内，文件名为 `honk-main-openwrt-25.12-aarch64_cortex-a53.ipk`。该 artifact 保留 1 天，请及时下载；真实缺包仍会报错并阻止上传。
 
-需要把已成功的 `main` 构建发布到 Releases 时，进入 [Actions → Publish existing build](https://github.com/Misaka009982/honk/actions/workflows/publish-existing.yml)，选择 `main` 并填写原 Release 的运行编号 `run_id`（链接末尾的数字，例如 `42221567511`）。该入口仅提取未过期的 ARM64 完整核心和 OpenWrt 产物，发布为 `debug.build.<run_id>`，标签指向原构建提交；不重新编译核心。旧产物没有 LuCI 时，单独补建固定版本的 LuCI 包及翻译转换工具；新产物已有 LuCI 时整套校验复用。OpenWrt 核心附件使用 `honk-debug-openwrt-25.12-aarch64_cortex-a53.apk` / `.ipk`，包内版本与内容不变；一键安装时显式指定 `HONK_VERSION=debug.build.<run_id>`。若 artifacts 已过期，需先重新手动运行 Release。
+### 复用已有构建
+
+需要把已成功的 `main` 构建发布到 Releases 时，先由维护者创建标签，再运行 [Actions → Publish existing build](https://github.com/Misaka009982/honk/actions/workflows/publish-existing.yml)：
+
+1. 在原 Release 运行页面确认 `run_id` 和完整提交 SHA，标签必须是 `debug.build.<run_id>` 并指向该提交。
+2. 在本地仓库创建轻量标签并推送。以运行 `42221567511` 为例：
+
+   ```sh
+   git tag debug.build.42221567511 6137d9b3461e54b6870597799dcfa2b94c2c03e3
+   git push origin refs/tags/debug.build.42221567511
+   ```
+
+3. 在 **Publish existing build → Run workflow** 中选择 **`main`**，填写 `run_id`，使用最新发布脚本。上一步标签用于记录核心来源；不要选择它运行旧版 Release 工作流。
+
+GitHub 在为工作流文件与默认分支不同的历史提交创建新标签时，要求 `Workflows: write`；内置 `GITHUB_TOKEN` 无法取得该权限，即使已有 `contents: write` 也会返回 403。参见 [Create a release](https://docs.github.com/en/rest/releases/releases#create-a-release)。维护者预建标签后，工作流只验证并使用已有标签，不移动标签，也不需要增加 PAT。缺少标签时预检打印准确命令；标签指向错误提交时停止。推送标签不会自动构建。
+
+该入口仅提取未过期的 ARM64 完整核心和 OpenWrt 产物，发布为 `debug.build.<run_id>`，标签指向原构建提交；不重新编译核心。旧产物没有 LuCI 时，单独补建固定版本的 LuCI 包及翻译转换工具；新产物已有 LuCI 时整套校验复用。OpenWrt 核心附件使用 `honk-debug-openwrt-25.12-aarch64_cortex-a53.apk` / `.ipk`，包内版本与内容不变；一键安装时显式指定 `HONK_VERSION=debug.build.<run_id>`。若原构建 artifacts 已过期，需先重新手动运行 Release。
+
+发布前会将完整附件和 `SHA256SUMS` 保存为 `openwrt-release-<run_id>-<run_attempt>` artifact，保留 7 天，运行摘要提供下载链接。之后创建 Release 或上传附件失败时，仍可下载其中的 A53 核心和三个 LuCI 组件并按上文手动安装；尚未成功发布时，一键安装脚本不能从 Release 下载这套附件。
+
+### 从标签构建与打包模块
 
 需要为已有标签构建发布物时，由维护者手动指定该标签，例如 `gh workflow run release.yml --ref <tag> --repo Misaka009982/honk`。正式 `v*` 标签仍执行版本与变更记录检查并创建草稿，`debug.*` 标签仍更新 Debug 发布；分支上的手动构建只提供 artifacts，发布使用上述独立入口。
 

@@ -29,7 +29,7 @@ honk follows the design of dae's eBPF datapath and configuration syntax, and of 
 
 **构建由维护者手动触发。** `CI`、`Release`、`Docker`、`Weekly` 和 `Reload benchmark` 仅保留 `workflow_dispatch`，提交代码、创建 PR、推送标签、发布 Release 或到达定时时间均不会自动启动构建。在 [Actions → Release](https://github.com/Misaka009982/honk/actions/workflows/release.yml) 点击 **Run workflow**、选择 `main`，即可构建并下载包含 APK/IPK 的 artifacts；手动运行 `CI` 可执行格式检查和测试。
 
-**把已有构建发布到 Releases：** 在 [Actions → Publish existing build](https://github.com/Misaka009982/honk/actions/workflows/publish-existing.yml) 选择 `main`，填写成功的 Release 运行编号 `run_id`。该入口复用未过期核心产物，发布为 `debug.build.<run_id>`；旧构建缺少 LuCI 时会单独补建页面与翻译包，不重新编译核心。安装时指定 `HONK_VERSION=debug.build.<run_id>`。选择 `main` 运行 Release 本身只生成 artifacts，不会发布。
+**把已有构建发布到 Releases：** 先由维护者创建并推送 `debug.build.<run_id>` 标签，使其指向原 Release 运行的提交，再在 [Actions → Publish existing build](https://github.com/Misaka009982/honk/actions/workflows/publish-existing.yml) 选择 `main`、填写该运行编号 `run_id`。内置 `GITHUB_TOKEN` 无法为工作流文件不同的历史提交创建新标签，缺少标签时预检会给出创建命令，详见[操作步骤](doc/zh/operations/openwrt-packages.md#复用已有构建)。该入口复用未过期核心产物，旧构建缺少 LuCI 时单独补建页面与翻译包；发布前将完整附件保存为保留 7 天的 artifact。安装时指定 `HONK_VERSION=debug.build.<run_id>`。选择 `main` 运行 Release 本身只生成 artifacts，不会发布。
 
 ## OpenWrt 一键安装
 
