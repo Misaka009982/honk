@@ -139,11 +139,19 @@ mod tests {
 
     #[tokio::test]
     async fn successful_retry_does_not_penalize_score_candidate() {
-        let nodes = ["a", "b"].map(|name| Node {
-            id: uuid::Uuid::new_v4(),
-            name: name.into(),
-            ..Default::default()
-        });
+        check_retry_score_outcome(true).await;
+    }
+
+    #[tokio::test]
+    async fn failed_retry_settles_score_candidate_once() {
+        check_retry_score_outcome(false).await;
+    }
+
+    async fn check_retry_score_outcome(retry_succeeds: bool) {
+        let nodes = [
+            Node::from_share_link("socks5://127.0.0.1:1080#a").unwrap(),
+            Node::from_share_link("socks5://127.0.0.1:1081#b").unwrap(),
+        ];
         let group = Group {
             name: "score".into(),
             policy: GroupPolicy::Score,
@@ -161,26 +169,24 @@ mod tests {
             )),
         };
 
-        for node in &nodes {
-            let feedback = manager
-                .feedback_for_node(node.id, context.clone())
-                .expect("Score candidate feedback");
-            for _ in 0..32 {
-                let reporter = feedback.start();
-                reporter.setup_succeeded();
-                reporter.tx(1);
-                reporter.first_response();
-                reporter.rx(1);
-                reporter.finish(ScoreOutcome::Success);
-            }
-        }
+        // 先产生一次业务完成，让下一次选点为未观测的候选保留验证额度。
+        let seed = manager
+            .feedback_for_node(nodes[0].id, context.clone())
+            .unwrap()
+            .start();
+        seed.setup_succeeded();
+        seed.tx(1);
+        seed.first_response();
+        seed.rx(1);
+        seed.finish(ScoreOutcome::Success);
 
-        let plan = manager.selection_plan_for_target("score", &context);
-        let incumbent = plan.entries[0].node.id;
-        let feedback = manager
-            .feedback_for_group_node("score", incumbent, context.clone())
-            .unwrap();
+        let mut plan = manager.selection_plan_for_target("score", &context);
+        let attempt = plan.entries[0].feedback.take().unwrap();
+        drop(plan);
+        let before = manager.score_budget_counters("score", SelectionNetwork::Tcp);
+        assert_eq!(before.reserved, 1, "用例必须取得候选验证额度");
         let calls = AtomicUsize::new(0);
+        let resets = AtomicUsize::new(0);
         let query = vec![
             0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, b'e',
             b'x', b'a', b'm', b'p', b'l', b'e', 0x03, b'c', b'o', b'm', 0x00, 0x00, 0x01, 0x00,
@@ -189,36 +195,52 @@ mod tests {
         let mut response = query.clone();
         response[2..4].copy_from_slice(&0x8180_u16.to_be_bytes());
 
-        for _ in 0..32 {
-            super::exchange_with_retry(
-                "test",
-                &query,
-                |reporter| async {
-                    let reporter = reporter.expect("Score reporter");
-                    reporter.setup_succeeded();
-                    if calls.fetch_add(1, Ordering::SeqCst).is_multiple_of(2) {
-                        return Err(io::Error::new(
-                            io::ErrorKind::ConnectionReset,
-                            "stale session",
-                        )
-                        .into());
-                    }
-                    reporter.tx(1);
-                    reporter.first_response();
-                    reporter.rx(1);
-                    Ok(response.clone())
-                },
-                |_| async {},
-                Some(feedback.business().begin().unwrap()),
-            )
-            .await
-            .expect("retry succeeds");
-        }
+        let result = super::exchange_with_retry(
+            "test",
+            &query,
+            |reporter| async {
+                let reporter = reporter.expect("Score reporter");
+                reporter.setup_succeeded();
+                if calls.fetch_add(1, Ordering::SeqCst) == 0 || !retry_succeeds {
+                    let kind = io::ErrorKind::ConnectionReset;
+                    return Err(io::Error::new(kind, "stale session").into());
+                }
+                reporter.tx(1);
+                reporter.first_response();
+                reporter.rx(1);
+                Ok(response.clone())
+            },
+            |_| async {
+                resets.fetch_add(1, Ordering::SeqCst);
+            },
+            Some(attempt.begin().unwrap()),
+        )
+        .await;
 
-        let selected = manager.selection_plan_for_target("score", &context).entries[0]
-            .node
-            .id;
-        assert_eq!(selected, incumbent);
+        if retry_succeeds {
+            assert_eq!(result.expect("retry succeeds"), response);
+        } else {
+            let error = result.unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<io::Error>().unwrap().kind(),
+                io::ErrorKind::ConnectionReset
+            );
+        }
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(resets.load(Ordering::SeqCst), 1);
+        let after = manager.score_budget_counters("score", SelectionNetwork::Tcp);
+        assert_eq!(after.business_starts, before.business_starts + 1);
+        assert_eq!(after.trial_starts, before.trial_starts + 1);
+        assert_eq!(after.spent, before.spent + 1);
+        assert_eq!(after.reserved, 0);
+        assert_eq!(
+            (
+                after.trial_success - before.trial_success,
+                after.trial_failure - before.trial_failure,
+                after.trial_cancelled - before.trial_cancelled,
+            ),
+            (u64::from(retry_succeeds), u64::from(!retry_succeeds), 0)
+        );
     }
 
     #[tokio::test]
